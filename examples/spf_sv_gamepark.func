@@ -1,0 +1,305 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// GamePark-like server
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_gamepark_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_gamepark_on_map_begin"
+
+  // Force reset, but wait until all other scripts executed
+  set _spf_sv_gamepark_claimed -1
+  sp_sc_timer 2000 "sp_sc_func_exec spf_sv_gamepark_reset"
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_gamepark_on_map_begin()
+{
+  sset ~cmd "sp_sc_func_exec spf_sv_gamepark_check" #_sp_sv_info_map_count
+  sp_sc_timer 10000 #~cmd
+}
+
+
+function spf_sv_gamepark_check( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if number cvar _spf_sv_gamepark_claimed == val 0
+    {
+      // Message to all
+      sp_sv_print_broadcast "This server is available. Type .gamepark claim <username> <password> to claim it"
+    }
+    else
+    {
+      sp_sc_flow_if number cvar _spf_sv_gamepark_claimed > val 0
+      {
+        sp_sc_info_time
+        set ~expire #_spf_sv_gamepark_claimed
+        add ~expire -$_sp_sc_info_time_min
+        sp_sc_flow_if number cvar ~expire <= val 0
+        {
+          set _spf_sv_gamepark_claimed -1
+          sp_sc_timer 2000 "sp_sc_func_exec spf_sv_gamepark_reset"
+          // Message to all
+          sp_sv_print_broadcast "This server has expired"
+        }
+        else
+        {
+          sp_sc_flow_if number cvar ~expire <= val 2.0
+          {
+            // Message to all
+            sp_sc_cvar_substr ~expire ~expire 0 3
+            sp_sc_cvar_sset ~broadcast "This server will expire in " #~expire " minutes. Type .gamepark renew to extend this period"
+            sp_sv_print_broadcast #~broadcast
+          }
+        }
+      }
+    }
+
+    sset ~cmd "sp_sc_func_exec spf_sv_gamepark_check" #_sp_sv_info_map_count
+    sp_sc_timer 10000 #~cmd
+  }
+}
+
+
+function spf_sv_gamepark_reset()
+{
+  set _spf_sv_gamepark_claimed 0
+
+  // Flush all rcon admins
+  sp_sc_cvar_save spf_sv_rcon.cfg ""
+
+  // Logout
+  set ~count 0
+  sp_sc_flow_while number cvar ~count < cvar maxclients
+  {
+    sp_sc_flow_if text cvar _spf_sv_rcon_ip_$~count != val ""
+    {
+      zero _spf_sv_rcon_username_$~count
+      zero _spf_sv_rcon_ip_$~count
+      zero _spf_sv_rcon_commands_$~count
+    }
+    add ~count 1
+  }
+
+  // Flush all muted / banned IP addresses
+  sp_sc_cvar_save spf_sv_ip.cfg ""
+
+  sp_sc_exec_file sofplus/addons/spf_sv_gamepark.cfg
+}
+
+
+function .gamepark( ~par_slot, ~par_command, * )
+{
+  zero ~msg
+
+  zero _sp_sv_info_client_ip
+  sp_sv_info_client #~par_slot
+
+  sp_sc_flow_if text cvar ~par_command == val ""
+  {
+    set ~par_command "help"
+  }
+
+  sp_sc_flow_if number cvar _spf_sv_gamepark_claimed == val 0
+  {
+    sp_sc_flow_if text cvar ~par_command == val "help"
+    {
+      sp_sv_print_client #~par_slot ".gamepark help (this help text)"
+      sp_sc_cvar_sset ~txt ".gamepark claim <username of choice> <password of choice> (claim server for " #_spf_sv_gamepark_duration " minutes)"
+      sp_sv_print_client #~par_slot #~txt
+      set ~msg "OK"
+    }
+    else
+    {
+      sp_sc_flow_if text cvar ~par_command == val "claim"
+      {
+        set ~username #~1
+        set ~password #~2
+        // Create admin user
+        sp_sc_cvar_sset ~slot_cidr #~par_slot "/0"
+        sp_sc_func_exec spf_sv_rcon_admin_add #~par_slot #~slot_cidr #~username NO_INFO_MESSAGE
+        sp_sc_flow_if text cvar _spf_sv_rcon_commands_$~par_slot == val "admin_password"
+        {
+          // Set admin user password
+          sp_sc_func_exec spf_sv_rcon_admin_password #~par_slot #~password
+
+          // Grant to admin user
+          set ~commands "admin_add,admin_grant,admin_list,admin_revoke,ammo,blue,ctf_loops,control_limit,fraglimit,gametype,hostname,ip_kick,ip_mute,kick,map,maplist,maplistfile,mute,password,pause,play"
+          set _spf_sv_rcon_commands_$~par_slot #~commands
+          sp_sc_func_exec spf_sv_rcon_admin_grant #~par_slot #~username #~commands
+          set ~commands "red,restart,say,spec,spectator_password,status,swap,timelimit,unmute,unpause,weapons,jail"
+          set _spf_sv_rcon_commands_$~par_slot #~commands
+          sp_sc_func_exec spf_sv_rcon_admin_grant #~par_slot #~username #~commands
+
+          // Try to login
+          sp_sc_func_exec spf_sv_rcon_config #~par_slot #~username #~password
+          sp_sc_flow_if text cvar _spf_sv_rcon_ip_$~par_slot != val ""
+          {
+            sp_sc_info_time
+            set _spf_sv_gamepark_claimed #_sp_sc_info_time_min
+            add _spf_sv_gamepark_claimed #_spf_sv_gamepark_duration
+            zero _sp_sv_info_client_name
+            sp_sv_info_client #~par_slot
+            sp_sc_cvar_sset hostname #_spf_sv_gamepark_hostname #_sp_sv_info_client_name
+            // Message to all
+            sp_sc_cvar_sset ~broadcast "This server will expire in " #_spf_sv_gamepark_duration " minutes. Type .gamepark renew to extend this period"
+            sp_sv_print_broadcast #~broadcast
+            // Message to admin
+            sp_sv_print_client #~par_slot "Type .gamepark and .rcon for available commands"
+          }
+          else
+          {
+            // Login failed
+            // Flush all rcon admins
+            sp_sc_cvar_save spf_sv_rcon.cfg ""
+          }
+        }
+      }
+      else
+      {
+        sset ~msg "ERROR: Command" #~par_command "not supported"
+      }
+    }
+  }
+  else
+  {
+    sp_sc_flow_if number cvar _spf_sv_gamepark_claimed > val 0
+    {
+      sp_sc_flow_if text cvar _sp_sv_info_client_ip == cvar _spf_sv_rcon_ip_$~par_slot
+      {
+        sp_sc_flow_if text cvar ~par_command == val "help"
+        {
+          sp_sv_print_client #~par_slot ".gamepark help (this help text)"
+          sp_sc_cvar_sset ~txt ".gamepark renew (renew server for " #_spf_sv_gamepark_duration " more minutes)"
+          sp_sv_print_client #~par_slot #~txt
+          sp_sv_print_client #~par_slot ".gamepark cancel (cancel server)"
+          sp_sv_print_client #~par_slot ".gamepark save <name> (save settings)"
+          sp_sv_print_client #~par_slot ".gamepark load <name> (load settings)"
+          set ~msg "OK"
+        }
+        else
+        {
+          sp_sc_flow_if text cvar ~par_command == val "renew"
+          {
+            sp_sc_info_time
+            set _spf_sv_gamepark_claimed #_sp_sc_info_time_min
+            add _spf_sv_gamepark_claimed #_spf_sv_gamepark_duration
+            // Message to all
+            sp_sc_cvar_sset ~broadcast "This server will expire in " #_spf_sv_gamepark_duration " minutes. Type .gamepark renew to extend this period"
+            sp_sv_print_broadcast #~broadcast
+            set ~msg "OK"
+          }
+          else
+          {
+            sp_sc_flow_if text cvar ~par_command == val "cancel"
+            {
+              set _spf_sv_gamepark_claimed -1
+              sp_sc_timer 2000 "sp_sc_func_exec spf_sv_gamepark_reset"
+              // Message to all
+              sp_sv_print_broadcast "This server has been canceled"
+              set ~msg "OK"
+            }
+            else
+            {
+              sp_sc_flow_if text cvar ~par_command == val "save"
+              {
+                set ~filename #~1
+
+                sp_sc_cvar_replace ~tmp ~filename "%00-%2f:" "%3a-%60:" "%7b-%ff:"
+                sp_sc_flow_if text cvar ~tmp == cvar ~filename
+                {
+                  sp_sc_cvar_len ~len ~filename
+                  sp_sc_flow_if number cvar ~len >= val 1
+                  {
+                    sp_sc_flow_if number cvar ~len <= val 32
+                    {
+                      sp_sc_cvar_sset ~path "sofplus/data/gamepark/" #~filename ".cfg"
+                      sp_sc_file_find ~list #~path filesystem file
+                      sp_sc_flow_if number cvar ~list_0 == val 0
+                      {
+                        sp_sc_cvar_substr ~path ~path 13 999
+                        set ~mapname #_sp_sv_info_map_current
+                        sp_sc_cvar_save #~path control_limit ctf_loops deathmatch dmflags fraglimit hostname sv_maplist sv_maplistfile timelimit ~mapname
+                        set ~msg "OK"
+                      }
+                      else
+                      {
+                        set ~msg "ERROR: Save already exists"
+                      }
+                    }
+                    else
+                    {
+                      set ~msg "ERROR: Save must be 1 .. 32 characters long"
+                    }
+                  }
+                  else
+                  {
+                    set ~msg "ERROR: Save must be 1 .. 32 characters long"
+                  }
+                }
+                else
+                {
+                  set ~msg "ERROR: Save may only contain a..z and 0..9"
+                }
+              }
+              else
+              {
+                sp_sc_flow_if text cvar ~par_command == val "load"
+                {
+                  set ~filename #~1
+
+                  sp_sc_cvar_replace ~tmp ~filename "%00-%2f:" "%3a-%60:" "%7b-%ff:"
+                  sp_sc_flow_if text cvar ~tmp == cvar ~filename
+                  {
+                    sp_sc_cvar_sset ~path "sofplus/data/gamepark/" #~filename ".cfg"
+                    sp_sc_file_find ~list #~path filesystem file
+                    sp_sc_flow_if number cvar ~list_0 == val 1
+                    {
+                      sp_sc_exec_file #~path
+                      map #~mapname
+                    }
+                    else
+                    {
+                      set ~msg "ERROR: Save not found"
+                    }
+                  }
+                  else
+                  {
+                    set ~msg "ERROR: Save not found"
+                  }
+                }
+                else
+                {
+                  sset ~msg "ERROR: Command" #~par_command "not supported"
+                }
+              }
+            }
+          }
+        }
+      }
+      else
+      {
+        set ~msg "ERROR: You must login first: .rcon login <username> <password>"
+      }
+    }
+    else
+    {
+      set ~msg "ERROR: Service temporarily unavailable"
+    }
+  }
+
+  sp_sc_flow_if text cvar ~msg != val ""
+  {
+    sp_sv_print_client #~par_slot #~msg
+  }
+}

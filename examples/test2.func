@@ -1,0 +1,9 @@
+function test2_init()
+{
+
+}
+
+function .lol(*)
+{
+ echo lol2
+}

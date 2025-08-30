@@ -1,0 +1,29 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Load addons
+// ---------------------------------------------------------------------------
+
+
+//
+// Load addons
+//
+function spf_sc_addons_init()
+{
+  sp_sc_file_find ~list sofplus/addons/*.func pak filesystem file
+  set ~count 1
+  sp_sc_flow_while number cvar ~count <= val #~list_0
+  {
+    sp_sc_cvar_copy ~filename ~list_$~count
+    sp_sc_cvar_substr ~name ~filename 15 1
+    sp_sc_flow_if text cvar ~name != val "-"
+    {
+      sp_sc_cvar_substr ~name ~filename 15 -5
+      sp_sc_cvar_append ~name "_init"
+
+      sp_sc_func_load_file #~filename
+      sp_sc_func_exec #~name
+    }
+    add ~count 1
+  }
+}

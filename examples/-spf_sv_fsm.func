@@ -1,0 +1,764 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Final Standing Man
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_fsm_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_fsm_on_map_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_fsm_on_client_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_disconnect "spf_sv_fsm_on_client_disconnect"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_die "spf_sv_fsm_on_client_die"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_spawn "spf_sv_fsm_on_client_spawn"
+
+  sp_sc_exec_file sofplus/addons/spf_sv_fsm.cfg
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_fsm_on_map_begin()
+{
+  // Initialize variables
+  set _spf_sv_fsm_round_count 0
+  set _spf_sv_fsm_round_end_frame 0
+  set _spf_sv_fsm_round_idle_frame 0
+  set timelimit 0
+  set fraglimit 0
+  sp_sc_cvar_random_float password -100000000000 100000000000
+  zero spectator_password
+
+  // Init all slots
+  set ~slot 0
+  sp_sc_flow_while number cvar ~slot < val #maxclients
+  {
+    set _spf_sv_fsm_play_$~slot -1
+    set _spf_sv_fsm_round_frags_$~slot 0
+    set _spf_sv_fsm_round_death_$~slot -1
+    set _spf_sv_fsm_round_spawn_$~slot 0
+    set _spf_sv_fsm_round_hacker_$~slot 0
+    set _spf_sv_fsm_map_frags_$~slot 0
+
+    add ~slot 1
+  }
+
+  // Wait for players to connect
+  set _spf_sv_fsm_wait_remaining #_spf_sv_fsm_wait_map_begin
+
+  // Wait a few seconds before the first check, because the num_cnct cvar isn't
+  // updated in realtime (only once per second) and the clients need time to reconnect
+  sset ~cmd "sp_sc_func_exec spf_sv_fsm_wait_check_loop" #_sp_sv_info_map_count
+  sp_sc_timer 5000 #~cmd
+}
+
+
+//
+// Things to do when the player enters
+//
+function spf_sv_fsm_on_client_begin( ~par_slot )
+{
+  set _spf_sv_fsm_play_$~par_slot 0
+  set _spf_sv_fsm_round_frags_$~par_slot 0
+  set _spf_sv_fsm_round_death_$~par_slot -1
+  set _spf_sv_fsm_round_spawn_$~par_slot 0
+  set _spf_sv_fsm_round_hacker_$~par_slot 0
+  set _spf_sv_fsm_map_frags_$~par_slot 0
+
+  sp_sv_client_spec $~par_slot :-X
+}
+
+
+//
+// Things to do when the player leaves
+//
+function spf_sv_fsm_on_client_disconnect( ~par_slot, * )
+{
+  set _spf_sv_fsm_play_$~par_slot -1
+  set _spf_sv_fsm_round_frags_$~par_slot 0
+  set _spf_sv_fsm_round_death_$~par_slot -1
+  set _spf_sv_fsm_round_spawn_$~par_slot 0
+  set _spf_sv_fsm_map_frags_$~par_slot -1
+}
+
+
+//
+// Things to do when the player dies
+//
+function spf_sv_fsm_on_client_die( ~par_slot, ~par_slot_killer, ~par_mod, ~par_flag )
+{
+  // Ignore telefrags and allow the player to respawn
+  sp_sc_flow_if number val #~par_mod != val 23
+  {
+    sp_sv_info_frames
+    set _spf_sv_fsm_round_death_$~par_slot #_sp_sv_info_frames
+    //set _sp_sv_say_spectator 2
+    set _spf_sv_fsm_unmute_frame #_sp_sv_info_frames
+    add _spf_sv_fsm_unmute_frame #_spf_sv_fsm_unmute_delay
+
+    // Was there a killer?
+    sp_sc_flow_if number val #~par_slot_killer >= val 0
+    {
+      add _spf_sv_fsm_round_frags_$~par_slot_killer 1
+    }
+    else
+    {
+      // Don't make suicide kills pay
+      add _spf_sv_fsm_round_death_$~par_slot -10
+    }
+    sp_sv_client_spec #~par_slot :-X
+  }
+  else
+  {
+    // Allow player to spawn again
+    set _spf_sv_fsm_round_spawn_$~par_slot 0
+  }
+}
+
+
+//
+// Things to do when the player spawns
+//
+function spf_sv_fsm_on_client_spawn( ~par_slot )
+{
+  sp_sc_flow_if number cvar _spf_sv_fsm_round_death_$~par_slot == val 0
+  {
+    // Players should spawn just once
+    add _spf_sv_fsm_round_spawn_$~par_slot 1
+    sp_sc_flow_if number cvar _spf_sv_fsm_round_spawn_$~par_slot > val 1
+    {
+      sp_sv_info_client #~par_slot
+      sp_sc_flow_if number val #_sp_sv_info_client_spectator == val 0
+      {
+        sp_sv_info_frames
+        set _spf_sv_fsm_round_death_$~par_slot #_sp_sv_info_frames
+        sp_sv_client_spec #~par_slot :-X
+      }
+      else
+      {
+        // Player manually switched to spectator
+        set _spf_sv_fsm_play_$~par_slot 0
+        set _spf_sv_fsm_round_death_$~par_slot -1
+      }
+    }
+  }
+  else
+  {
+    sp_sv_info_client #~par_slot
+    // Supposedly dead, but not spectating?
+    sp_sc_flow_if number val #_sp_sv_info_client_spectator == val 0
+    {
+      sp_sv_client_spec $~par_slot :-X
+    }
+  }
+}
+
+
+//
+// Play
+//
+function .play( ~par_slot )
+{
+  sp_sc_flow_if number cvar _spf_sv_fsm_play_$~par_slot != val 1
+  {
+    // Typed .play for the first time
+    set _spf_sv_fsm_play_$~par_slot 1
+    sp_sv_info_client #~par_slot
+    sp_sv_print_sp_broadcast 2 #_sp_sv_info_client_name
+    sp_sv_print_sp_client #~par_slot 3
+  }
+  else
+  {
+    // Already typed .play before
+    sp_sv_print_sp_client #~par_slot 4
+  }
+}
+
+
+//
+// Spec
+//
+function .spec( ~par_slot )
+{
+  set _spf_sv_fsm_play_$~par_slot 0
+  sp_sv_print_sp_client #~par_slot 10
+}
+
+
+//
+// Check if we can stop waiting
+//
+function spf_sv_fsm_wait_check_loop( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if number val #_sp_sv_info_num_cnct > val 0
+    {
+      sp_sc_flow_if number val #_spf_sv_fsm_wait_remaining > val 0
+      {
+        // Still waiting
+        sp_sv_print_sp_broadcast 32 #_sp_sv_info_num_cnct #_spf_sv_fsm_wait_remaining
+
+        sset ~cmd "sp_sc_func_exec spf_sv_fsm_wait_check_loop" #_sp_sv_info_map_count
+        sp_sc_timer 1000 #~cmd
+
+        add _spf_sv_fsm_wait_remaining -1
+      }
+      else
+      {
+        // Wait timeout
+        sp_sv_print_sp_broadcast 31
+
+        sp_sc_func_exec spf_sv_fsm_round_init #~par_lc
+      }
+    }
+    else
+    {
+      // Everyone is in
+      sp_sv_print_sp_broadcast 30
+
+      sp_sc_func_exec spf_sv_fsm_round_init #~par_lc
+    }
+  }
+}
+
+
+//
+// Round init
+//
+function spf_sv_fsm_round_init( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    // Check how many clients want to play
+    set ~count 0
+    set ~slot 0
+    sp_sc_flow_while number cvar ~slot < val #maxclients
+    {
+      sp_sc_flow_if number cvar _spf_sv_fsm_play_$~slot == val 1
+      {
+        add ~count 1
+      }
+      add ~slot 1
+    }
+
+    // Only start a round with 2 or more players
+    sp_sc_flow_if number val #~count > val 1
+    {
+      // Next round starts in 10 seconds
+      sp_sv_print_sp_broadcast 5 "10"
+      sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_countdown" #_sp_sv_info_map_count 3
+      sp_sc_timer 6000 #~cmd
+    }
+    else
+    {
+      sp_sv_info_frames
+      sp_sc_flow_if number val #_sp_sv_info_frames > val 864000
+      {
+        // Restart the map if the same map has been running for a long time (24 hours)
+        // The server gets laggy or clients crash, when the map never reloads
+        echo "Forced map restart"
+        map #mapname
+      }
+      else
+      {
+        // Wait for players
+        set ~req 2
+        add ~req -$~count
+        sp_sv_print_sp_broadcast 9 #~req
+        sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_init" #_sp_sv_info_map_count
+        sp_sc_timer 5000 #~cmd
+      }
+    }
+  }
+}
+
+
+//
+// Count down to 0
+//
+function spf_sv_fsm_round_countdown( ~par_lc, ~par_countdown )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if number val #~par_countdown > val 0
+    {
+      sp_sc_flow_if number val #~par_countdown <= val 3
+      {
+        sp_sv_print_sp_broadcast 5 #~par_countdown
+      }
+      sp_sc_flow_if number val #~par_countdown == val 3
+      {
+        sp_sv_sound_broadcast 1
+      }
+      else
+      {
+        sp_sc_flow_if number val #~par_countdown == val 2
+        {
+          sp_sv_sound_broadcast 2
+        }
+        else
+        {
+          sp_sc_flow_if number val #~par_countdown == val 1
+          {
+            sp_sv_sound_broadcast 3
+          }
+        }
+      }
+
+      add ~par_countdown -1
+
+      sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_countdown" #_sp_sv_info_map_count #~par_countdown
+      sp_sc_timer 1000 #~cmd
+    }
+    else
+    {
+      //sp_sv_print_sp_broadcast 26
+      sp_sc_func_exec spf_sv_fsm_round_start
+    }
+  }
+}
+
+
+//
+// Start round
+//
+function spf_sv_fsm_round_start()
+{
+  // Check how many clients want to play
+  set ~count 0
+  set ~slot 0
+  sp_sc_flow_while number cvar ~slot < val #maxclients
+  {
+    sp_sc_flow_if number cvar _spf_sv_fsm_play_$~slot == val 1
+    {
+      add ~count 1
+    }
+    add ~slot 1
+  }
+  // Only start a round with 2 or more players
+  sp_sc_flow_if number val #~count > val 1
+  {
+    sp_sc_cvar_random_float password -100000000000 100000000000
+
+    // Freeview
+    set _sp_sv_spectator_team 0
+
+    // Check all current players
+    set ~slot 0
+    sp_sc_flow_while number cvar ~slot < val #maxclients
+    {
+      set _spf_sv_fsm_round_frags_$~slot 0
+      set _spf_sv_fsm_round_spawn_$~slot 0
+      set _spf_sv_fsm_round_hacker_$~slot 0
+      sp_sc_flow_if number cvar _spf_sv_fsm_play_$~slot == val 1
+      {
+        set _spf_sv_fsm_round_death_$~slot 0
+        sp_sv_client_play $~slot :-X
+      }
+      else
+      {
+        // Unranked
+        set _spf_sv_fsm_round_death_$~slot -1
+      }
+      add ~slot 1
+    }
+
+    add _spf_sv_fsm_round_count 1
+    sp_sv_print_sp_broadcast 8 #_spf_sv_fsm_round_count #_spf_sv_fsm_rounds
+
+    sp_sv_info_frames
+
+    set _spf_sv_fsm_round_end_frame #_sp_sv_info_frames
+    add _spf_sv_fsm_round_end_frame #_spf_sv_fsm_round_duration
+
+    set _spf_sv_fsm_round_idle_frame #_sp_sv_info_frames
+    add _spf_sv_fsm_round_idle_frame #_spf_sv_fsm_idle_frames
+
+    //set _sp_sv_say_spectator 2
+    set _spf_sv_fsm_unmute_frame #_sp_sv_info_frames
+    add _spf_sv_fsm_unmute_frame #_spf_sv_fsm_unmute_delay
+
+    // Change password, but wait a while because it takes some time for players to switch
+    //sp_sc_timer 4500 "sp_sc_cvar_random_float password -100000000000 100000000000"
+
+    // Checks for round end and to unmute spectators
+    sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_check_loop" #_sp_sv_info_map_count
+    sp_sc_timer 5000 #~cmd
+  }
+  else
+  {
+    sp_sc_func_exec spf_sv_fsm_round_init #_sp_sv_info_map_count
+  }
+}
+
+
+//
+// Check round
+//
+function spf_sv_fsm_round_check_loop( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if number val #_sp_sv_info_num_players <= val 1
+    {
+      // Watch remaining player
+      set _sp_sv_spectator_team 1
+
+      sp_sv_print_sp_broadcast 6
+      sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_end" #_sp_sv_info_map_count
+      sp_sc_timer 1000 #~cmd
+    }
+    else
+    {
+      sp_sv_info_frames
+      sp_sc_flow_if number val #_sp_sv_info_frames >= val #_spf_sv_fsm_round_end_frame
+      {
+        sp_sv_print_sp_broadcast 7
+        sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_end" #_sp_sv_info_map_count
+        sp_sc_timer 1000 #~cmd
+      }
+      else
+      {
+        sp_sc_flow_if number val #_sp_sv_info_frames >= val #_spf_sv_fsm_unmute_frame
+        {
+          sp_sv_print_sp_broadcast 0
+          //set _sp_sv_say_spectator 1
+          set _spf_sv_fsm_unmute_frame 999999999
+        }
+
+        // Check for idle players and hackers
+        set ~slot 0
+        sp_sc_flow_while number cvar ~slot < val #maxclients
+        {
+          sp_sc_flow_if number cvar _spf_sv_fsm_play_$~slot >= val 0
+          {
+            sp_sv_info_client #~slot
+
+            // Undead idle players?
+            sp_sc_flow_if number cvar _spf_sv_fsm_round_death_$~slot == val 0
+            {
+              sp_sc_flow_if number val #_sp_sv_info_client_frames_idle >= val #_spf_sv_fsm_idle_frames
+              {
+                //sp_sv_info_frames: already did that earlier
+                sp_sc_flow_if number val #_sp_sv_info_frames >= val #_spf_sv_fsm_round_idle_frame
+                {
+                  sp_sv_print_sp_broadcast 1 #_sp_sv_info_client_name
+                  set _spf_sv_fsm_play_$~slot 0
+                  sp_sv_client_spec $~slot :-X
+
+                  // Unranked
+                  set _spf_sv_fsm_round_death_$~slot -1
+                }
+              }
+            }
+
+            // Supposedly dead, but not spectating?
+            sp_sc_flow_if number cvar _spf_sv_fsm_round_death_$~slot != val 0
+            {
+              sp_sc_flow_if number val #_sp_sv_info_client_spectator == val 0
+              {
+                sp_sv_client_spec $~slot :-X
+
+                add _spf_sv_fsm_round_hacker_$~slot 1
+                sp_sc_flow_if number cvar _spf_sv_fsm_round_hacker_$~slot >= val 10
+                {
+                  echo Hacker $_sp_sv_info_client_ip
+                  //filter_add #_sp_sv_info_client_ip
+                  kick #~slot
+                }
+              }
+            }
+          }
+          add ~slot 1
+        }
+
+        // Loop again
+        sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_check_loop" #_sp_sv_info_map_count
+        sp_sc_timer 1000 #~cmd
+      }
+    }
+  }
+}
+
+
+//
+// Round ended
+//
+function spf_sv_fsm_round_end( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    set ~slot 0
+    sp_sc_flow_while number cvar ~slot < val #maxclients
+    {
+      sp_sc_flow_if number cvar _spf_sv_fsm_round_death_$~slot == val 0
+      {
+        sp_sv_info_client #~slot
+        sp_sc_flow_if number val #_sp_sv_info_client_spectator == val 0
+        {
+          // The FSM
+         sp_sv_info_frames
+         set _spf_sv_fsm_round_death_$~slot #_sp_sv_info_frames
+        }
+        else
+        {
+          echo Chicken
+          // Player went spec because he got scared
+          set _spf_sv_fsm_play_$~slot 0
+          // Unranked
+          set _spf_sv_fsm_round_death_$~slot -1
+        }
+      }
+      add ~slot 1
+    }
+
+    // Print round highscores
+    sp_sc_func_exec spf_sv_fsm_rh
+
+    sp_sc_flow_if number val #_spf_sv_fsm_round_count >= val #_spf_sv_fsm_rounds
+    {
+      // Delay to allow players to read the round stats
+      sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_end_new_map" #_sp_sv_info_map_count
+      sp_sc_timer 5000 #~cmd
+    }
+    else
+    {
+      // Delay to allow players to read the round stats
+      sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_end_new_round" #_sp_sv_info_map_count
+      sp_sc_timer 5000 #~cmd
+    }
+  }
+}
+
+
+//
+// Round ended: new map
+//
+function spf_sv_fsm_round_end_new_map( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    // Force previous round winner to spectate
+    sp_sv_client_spec * :-X
+
+    sp_sc_timer 1000 "set timelimit 0.01"
+    sp_sc_timer 2000 "sp_sc_func_exec spf_sv_fsm_mh"
+  }
+}
+
+
+//
+// Round ended: new round
+//
+function spf_sv_fsm_round_end_new_round( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    // Force previous round winner to spectate
+    sp_sv_client_spec * :-X
+
+    // Next round starts in 5 seconds
+    sp_sv_print_sp_broadcast 5 "5"
+    sset ~cmd "sp_sc_func_exec spf_sv_fsm_round_countdown" #_sp_sv_info_map_count 3
+    sp_sc_timer 1000 #~cmd
+  }
+}
+
+
+//
+// Compute highscores on round end and print them
+//
+function spf_sv_fsm_rh()
+{
+  // Init to none
+  set ~tmp 1
+  set ~max #maxclients
+  sp_sc_flow_if number val #~max < val 20
+  {
+    set ~max 20
+  }
+  sp_sc_flow_while number cvar ~tmp <= val #~max
+  {
+    zero ~hs_name_$~tmp
+    set ~hs_frags_$~tmp 0
+    set ~hs_death_$~tmp 0
+    set ~hs$~tmp "                   "
+    add ~tmp 1
+  }
+
+  // Check all current players
+  set ~slot 0
+  sp_sc_flow_while number cvar ~slot < val #maxclients
+  {
+    // Player played?
+    sp_sc_flow_if number cvar _spf_sv_fsm_round_death_$~slot >= val 0
+    {
+      // Get player info
+      sp_sv_info_client #~slot
+
+      set ~pos #maxclients
+      add ~pos -1
+      set ~hs_death_0 999999999
+
+      sp_sc_cvar_copy ~cmp ~hs_death_$~pos
+      sp_sc_flow_while number cvar _spf_sv_fsm_round_death_$~slot > cvar ~cmp
+      {
+        set ~pos2 #~pos
+        add ~pos2 1
+
+        sp_sc_cvar_copy ~hs_name_$~pos2 ~hs_name_$~pos
+        sp_sc_cvar_copy ~hs_frags_$~pos2 ~hs_frags_$~pos
+        sp_sc_cvar_copy ~hs_death_$~pos2 ~hs_death_$~pos
+        sp_sc_cvar_copy ~hs$~pos2 ~hs$~pos
+
+        add ~pos -1
+        sp_sc_cvar_copy ~cmp ~hs_death_$~pos
+      }
+
+      // Now store the new highscore at the correct location
+      add ~pos 1
+
+      set ~hs_name_$~pos #_sp_sv_info_client_name
+      sp_sc_cvar_copy ~hs_frags_$~pos _spf_sv_fsm_round_frags_$~slot
+      sp_sc_cvar_copy ~hs_death_$~pos _spf_sv_fsm_round_death_$~slot
+
+      // Score
+      sp_sc_cvar_copy ~frags _spf_sv_fsm_round_frags_$~slot
+      sp_sc_cvar_sset ~hs$~pos "   " #~frags " "
+      sp_sc_cvar_substr ~hs$~pos ~hs$~pos -4 4
+
+      // Name
+      // Only allow 15 name characters (of about 32 max)
+      sp_sc_cvar_substr _sp_sv_info_client_name _sp_sv_info_client_name 0 15
+      sp_sc_cvar_append ~hs$~pos #_sp_sv_info_client_name
+
+      // Spaces to get the correct length
+      sp_sc_cvar_no_color ~name _sp_sv_info_client_name
+      sp_sc_cvar_len ~len ~name
+      set ~space "               "
+      set ~substr 15
+      add ~substr -$~len
+      sp_sc_cvar_substr ~space ~space 0 #~substr
+      sp_sc_cvar_append ~hs$~pos #~space
+    }
+    add ~slot 1
+  }
+
+  sp_sc_flow_if number val #~hs_death_1 > val 0
+  {
+    // The FSM
+    sp_sv_print_sp_broadcast 11 #~hs_name_1
+
+    set ~slot 0
+    sp_sc_flow_while number cvar ~slot < val #maxclients
+    {
+      sp_sc_flow_if number cvar _spf_sv_fsm_round_death_$~slot == val #~hs_death_1
+      {
+        // The FSM frags are counted for map totals
+        sp_sc_cvar_copy ~frags _spf_sv_fsm_round_frags_$~slot
+        add _spf_sv_fsm_map_frags_$~slot #~frags
+      }
+      add ~slot 1
+    }
+  }
+
+  sp_sv_print_sp_broadcast 13 #~hs1 #~hs5 #~hs9 #~hs2 #~hs6 #~hs10 #~hs3 #~hs7 #~hs11 #~hs4 #~hs8 #~hs12
+}
+
+
+//
+// Compute highscores on map end and print them
+//
+function spf_sv_fsm_mh()
+{
+  // Init to none
+  set ~tmp 1
+  set ~max #maxclients
+  sp_sc_flow_if number val #~max < val 20
+  {
+    set ~max 20
+  }
+  sp_sc_flow_while number cvar ~tmp <= val #~max
+  {
+    zero ~hs_name_$~tmp
+    set ~hs_frags_$~tmp 0
+    set ~hs$~tmp "                   "
+    add ~tmp 1
+  }
+
+  // Check all current players
+  set ~slot 0
+  sp_sc_flow_while number cvar ~slot < val #maxclients
+  {
+    // Player played and won some rounds?
+    sp_sc_flow_if number cvar _spf_sv_fsm_map_frags_$~slot > val 0
+    {
+      // Get player info
+      sp_sv_info_client #~slot
+
+      set ~pos #maxclients
+      add ~pos -1
+      set ~hs_frags_0 999999999
+
+      sp_sc_cvar_copy ~cmp ~hs_frags_$~pos
+      sp_sc_flow_while number cvar _spf_sv_fsm_map_frags_$~slot > cvar ~cmp
+      {
+        set ~pos2 #~pos
+        add ~pos2 1
+
+        sp_sc_cvar_copy ~hs_name_$~pos2 ~hs_name_$~pos
+        sp_sc_cvar_copy ~hs_frags_$~pos2 ~hs_frags_$~pos
+        sp_sc_cvar_copy ~hs$~pos2 ~hs$~pos
+
+        add ~pos -1
+        sp_sc_cvar_copy ~cmp ~hs_frags_$~pos
+      }
+
+      // Now store the new highscore at the correct location
+      add ~pos 1
+
+      set ~hs_name_$~pos #_sp_sv_info_client_name
+      sp_sc_cvar_copy ~hs_frags_$~pos _spf_sv_fsm_map_frags_$~slot
+
+      // Score
+      sp_sc_cvar_copy ~frags _spf_sv_fsm_map_frags_$~slot
+      sp_sc_cvar_sset ~hs$~pos "   " #~frags " "
+      sp_sc_cvar_substr ~hs$~pos ~hs$~pos -4 4
+
+      // Name
+      // Only allow 15 name characters (of about 32 max)
+      sp_sc_cvar_substr _sp_sv_info_client_name _sp_sv_info_client_name 0 15
+      sp_sc_cvar_append ~hs$~pos #_sp_sv_info_client_name
+
+      // Spaces to get the correct length
+      sp_sc_cvar_no_color ~name _sp_sv_info_client_name
+      sp_sc_cvar_len ~len ~name
+      set ~space "               "
+      set ~substr 15
+      add ~substr -$~len
+      sp_sc_cvar_substr ~space ~space 0 #~substr
+      sp_sc_cvar_append ~hs$~pos #~space
+
+    }
+    add ~slot 1
+  }
+
+  // The FSM
+  sp_sv_print_sp_broadcast 11 #~hs_name_1
+
+  sp_sv_print_sp_broadcast 13 #~hs1 #~hs5 #~hs9 #~hs2 #~hs6 #~hs10 #~hs3 #~hs7 #~hs11 #~hs4 #~hs8 #~hs12
+  //sp_sv_print_sp_broadcast 12 #mapname #~hs1 #~hs2 #~hs3 #~hs4 #~hs5 #~hs6 #~hs7 #~hs8 #~hs9 #~hs10 #~hs11 #~hs12 #~hs13 #~hs14 #~hs15 #~hs16 #~hs17 #~hs18 #~hs19 #~hs20
+}

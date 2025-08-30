@@ -1,0 +1,71 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Teamplay server with teamkill penalty
+// When enabled, teamkills will be counted and when a limit is reached, the
+// player is kicked or moved into spectator mode
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_teamkill_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_teamkill_on_client_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_die "spf_sv_teamkill_on_client_die"
+
+  sp_sc_exec_file sofplus/addons/spf_sv_teamkill.cfg
+}
+
+
+//
+// Client begin
+//
+function spf_sv_teamkill_on_client_begin( ~par_slot )
+{
+  // No teamkills
+  set _spf_sv_teamkill_$~par_slot 0
+}
+
+
+//
+// Someone died
+//
+function spf_sv_teamkill_on_client_die( ~par_slot, ~par_slot_killer, ~par_mod, ~par_flag )
+{
+  // Was there a killer?
+  sp_sc_flow_if number val #~par_slot_killer >= val 0
+  {
+    // Check for teamkill
+    sp_sc_flow_if number val #~par_mod > val 134217727
+    {
+      // Killed the flag carrier?
+      sp_sc_flow_if number val #~par_flag > val 0
+      {
+        // Killing of the flag carries means extra teamkills
+        add _spf_sv_teamkill_$~par_slot_killer #_spf_sv_teamkill_flag_carrier_penalty
+      }
+
+      // Increment number of teamkills
+      add _spf_sv_teamkill_$~par_slot_killer 1
+
+      // Maximum reached?
+      sp_sc_flow_if number cvar _spf_sv_teamkill_$~par_slot_killer > val #_spf_sv_teamkill_max
+      {
+        // Message to all clients
+        sp_sv_info_client #~par_slot_killer
+        sp_sv_print_sp_broadcast 17 #_sp_sv_info_client_name
+
+        // Do something to killer (kick / sp_sv_client_spec)
+        #_spf_sv_teamkill_action #~par_slot_killer
+      }
+      else
+      {
+        // Message to killer
+        sp_sc_cvar_copy ~tmp _spf_sv_teamkill_$~par_slot_killer
+        sp_sv_print_sp_client #~par_slot_killer 18 #~tmp #_spf_sv_teamkill_max
+      }
+    }
+  }
+}

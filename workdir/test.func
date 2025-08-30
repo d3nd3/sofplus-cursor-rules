@@ -1,0 +1,25 @@
+function test_init()
+{
+    // Print all cvars that start with gl_
+    sp_sc_cvar_find ~list gl_*
+
+    sp_sc_flow_if number cvar #~list_0 == val 0
+    {
+        echo "No gl_ cvars found"
+    }
+    else
+    {
+        set ~count 1
+        sp_sc_flow_while number cvar ~count <= val #~list_0
+        {
+            // Get cvar name and value
+            sp_sc_cvar_copy ~cvar_name ~list_$~count
+            sp_sc_cvar_copy ~cvar_val ~cvar_name
+
+            sp_sc_cvar_sset ~msg #~cvar_name " = " #~cvar_val
+            echo #~msg
+
+            add ~count 1
+        }
+    }
+}

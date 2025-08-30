@@ -1,0 +1,142 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Wait for players when the map starts
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_wait_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_wait_on_map_begin"
+
+  sp_sc_exec_file sofplus/addons/spf_sv_wait.cfg
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_wait_on_map_begin()
+{
+  set _spf_sv_wait_remaining #_spf_sv_wait_seconds
+
+  set paused 1
+
+  // Wait a few seconds before the first check, because the num_cnct cvar isn't
+  // updated in realtime (only once per second) and the clients need time to reconnect
+  sset ~cmd "sp_sc_func_exec spf_sv_wait_check_first" #_sp_sv_info_map_count
+  sp_sc_timer 5000 #~cmd
+}
+
+
+//
+// Check if we can stop waiting
+//
+function spf_sv_wait_check_first( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    // Only continue the wait if at least 2 players are connecting
+    sp_sc_flow_if number val #_sp_sv_info_num_cnct >= val 2
+    {
+      sp_sc_func_exec spf_sv_wait_check_loop #_sp_sv_info_map_count
+    }
+    else
+    {
+      // Unpause when less than 2 players are in the server
+      set paused 0
+    }
+  }
+}
+
+
+//
+// Check if we can stop waiting
+//
+function spf_sv_wait_check_loop( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if number val #_sp_sv_info_num_cnct > val 0
+    {
+      sp_sc_flow_if number val #_spf_sv_wait_remaining > val 0
+      {
+        // Still waiting
+        sp_sv_print_sp_broadcast 32 #_sp_sv_info_num_cnct #_spf_sv_wait_remaining
+
+        sset ~cmd "sp_sc_func_exec spf_sv_wait_check_loop" #_sp_sv_info_map_count
+        sp_sc_timer 1000 #~cmd
+
+        add _spf_sv_wait_remaining -1
+      }
+      else
+      {
+        // Wait timeout
+        sp_sv_print_sp_broadcast 31
+
+        sset ~cmd "sp_sc_func_exec spf_sv_wait_check_countdown" #_sp_sv_info_map_count 3
+        sp_sc_timer 1000 #~cmd
+      }
+    }
+    else
+    {
+      // Everyone is in
+      sp_sv_print_sp_broadcast 30
+
+      sset ~cmd "sp_sc_func_exec spf_sv_wait_check_countdown" #_sp_sv_info_map_count 3
+      sp_sc_timer 1000 #~cmd
+    }
+  }
+}
+
+
+//
+// Count down to 0
+//
+function spf_sv_wait_check_countdown( ~par_lc, ~par_count )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if number val #~par_count == val 3
+    {
+      sp_sv_print_sp_broadcast 29
+      sp_sv_sound_broadcast 1
+    }
+
+    sp_sc_flow_if number val #~par_count == val 2
+    {
+      sp_sv_print_sp_broadcast 28
+      sp_sv_sound_broadcast 2
+    }
+
+    sp_sc_flow_if number val #~par_count == val 1
+    {
+      sp_sv_print_sp_broadcast 27
+      sp_sv_sound_broadcast 3
+    }
+
+    sp_sc_flow_if number val #~par_count == val 0
+    {
+      sp_sv_print_sp_broadcast 26
+      sp_sv_sound_broadcast 4
+    }
+
+    sp_sc_flow_if number val #~par_count > val 0
+    {
+      add ~par_count -1
+
+      sset ~cmd "sp_sc_func_exec spf_sv_wait_check_countdown" #_sp_sv_info_map_count #~par_count
+      sp_sc_timer 1000 #~cmd
+    }
+    else
+    {
+      set paused 0
+    }
+  }
+}

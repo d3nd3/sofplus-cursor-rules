@@ -1,0 +1,89 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+
+//
+// Add command to a list, if not already present
+//
+function spf_sc_list_add_cmd( ~par_cvar_name, ~par_item )
+{
+  sp_sc_func_exec spf_sc_list_add #~par_cvar_name #~par_item ";"
+}
+
+
+//
+// Add function to a list, if not already present
+//
+function spf_sc_list_add_func( ~par_cvar_name, ~par_item )
+{
+  sp_sc_func_exec spf_sc_list_add #~par_cvar_name #~par_item ","
+}
+
+
+//
+// Add function to a list, if not already present
+// Create the on_change cvar, if not already present
+//
+function spf_sc_list_onchange_add_func( ~par_cvar_name, ~par_item )
+{
+  sp_sc_cvar_sset ~cvar_name "_sp_sc_on_change_" #~par_cvar_name
+  sp_sc_flow_if text cvar #~cvar_name == val ""
+  {
+    sp_sc_on_change #~par_cvar_name #~par_item
+  }
+  else
+  {
+    sp_sc_func_exec spf_sc_list_add #~cvar_name #~par_item ","
+  }
+}
+
+
+//
+// Add item to a list, if not already present
+//
+function spf_sc_list_add( ~par_cvar_name, ~par_item, ~par_separator )
+{
+  sp_sc_flow_if text cvar #~par_cvar_name != val ""
+  {
+    sp_sc_flow_if text val #~par_item != val ""
+    {
+      sp_sc_cvar_split ~orig #~par_separator #~par_cvar_name
+      sp_sc_cvar_split ~new #~par_separator ~par_item
+      set ~orig_max #~orig_0
+      add ~orig_max 1
+      add ~orig_max -$~new_0
+      set ~orig_loop 1
+      set ~found 0
+      sp_sc_flow_while number cvar ~orig_loop <= val #~orig_max
+      {
+        set ~found 1
+        set ~new_loop 1
+        sp_sc_flow_while number cvar ~new_loop <= val #~new_0
+        {
+          sp_sc_flow_if text cvar ~new_$~new_loop != cvar ~orig_$~orig_loop
+          {
+            set ~found 0
+          }
+          add ~new_loop 1
+        }
+        sp_sc_flow_if number val #~found == val 1
+        {
+          set ~orig_loop 99999999
+        }
+        add ~orig_loop 1
+      }
+      sp_sc_flow_if number val #~found == val 0
+      {
+        sp_sc_cvar_append #~par_cvar_name #~par_separator
+        sp_sc_cvar_append #~par_cvar_name #~par_item
+      }
+    }
+  }
+  else
+  {
+    set #~par_cvar_name #~par_item
+  }
+}

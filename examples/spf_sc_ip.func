@@ -1,0 +1,222 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+
+//
+// Compare an IP address against a comma separated list in IP/CIDR notation
+//
+function spf_sc_ip_match_cidr_list( ~par_ip, ~par_ip_cidr_list, ~ret_code )
+{
+  set #~ret_code 0
+
+  sp_sc_cvar_split ~split "," ~par_ip_cidr_list
+  set ~count 1
+  sp_sc_flow_while number cvar ~count <= val #~split_0
+  {
+    sp_sc_cvar_copy ~ip_cidr ~split_$~count
+    sp_sc_func_exec spf_sc_ip_match_cidr #~par_ip #~ip_cidr #~ret_code
+    sp_sc_flow_if number cvar #~ret_code == val 1
+    {
+      set ~count 999999
+    }
+    add ~count 1
+  }
+}
+
+
+//
+// Compare an IP address against an address in IP/CIDR notation
+//
+function spf_sc_ip_match_cidr( ~par_ip, ~par_ip_cidr, ~ret_code )
+{
+  set #~ret_code 0
+
+  sp_sc_cvar_split ~split "/" ~par_ip_cidr
+  sp_sc_flow_if number cvar ~split_0 == val 2
+  {
+    set ~cidr #~split_2
+  }
+  else
+  {
+    set ~cidr 32
+  }
+
+  sp_sc_flow_if number cvar ~cidr == val 32
+  {
+    set ~mask_1 255
+    set ~mask_2 255
+    set ~mask_3 255
+    set ~mask_4 255
+  }
+  else
+  {
+    sp_sc_flow_if number cvar ~cidr == val 0
+    {
+      set ~mask_1 0
+      set ~mask_2 0
+      set ~mask_3 0
+      set ~mask_4 0
+    }
+    else
+    {
+      set ~tmp #~cidr
+      set ~count 0
+      sp_sc_flow_while number cvar ~tmp >= val 8
+      {
+        add ~count 1
+        set ~mask_$~count 255
+        add ~tmp -8
+      }
+      sp_sc_flow_if number cvar ~tmp > val 0
+      {
+        set ~cidr_1 128
+        set ~cidr_2 192
+        set ~cidr_3 224
+        set ~cidr_4 240
+        set ~cidr_5 248
+        set ~cidr_6 252
+        set ~cidr_7 254
+        add ~count 1
+        sp_sc_cvar_copy ~mask_$~count ~cidr_$~tmp
+      }
+      sp_sc_flow_while number cvar ~count < val 4
+      {
+        add ~count 1
+        set ~mask_$~count 0
+      }
+    }
+  }
+
+  sp_sc_cvar_split ~compare "." ~split_1
+  sp_sc_cvar_split ~ip "." ~par_ip
+  and ~compare_1 #~mask_1
+  and ~ip_1 #~mask_1
+  sp_sc_flow_if number cvar ~ip_1 == cvar ~compare_1
+  {
+    and ~compare_2 #~mask_2
+    and ~ip_2 #~mask_2
+    sp_sc_flow_if number cvar ~ip_2 == cvar ~compare_2
+    {
+      and ~compare_3 #~mask_3
+      and ~ip_3 #~mask_3
+      sp_sc_flow_if number cvar ~ip_3 == cvar ~compare_3
+      {
+        and ~compare_4 #~mask_4
+        and ~ip_4 #~mask_4
+        sp_sc_flow_if number cvar ~ip_4 == cvar ~compare_4
+        {
+          set #~ret_code 1
+        }
+      }
+    }
+  }
+}
+
+
+//
+// Convert IP and CIDR to IP/CIDR notation
+//
+function spf_sc_ip_to_cidr( ~par_ip, ~par_cidr, ~ret_ip_cidr )
+{
+  sp_sc_flow_if number cvar ~par_cidr >= val 32
+  {
+    set ~par_cidr 32
+    set ~mask_1 255
+    set ~mask_2 255
+    set ~mask_3 255
+    set ~mask_4 255
+  }
+  else
+  {
+    sp_sc_flow_if number cvar ~par_cidr <= val 0
+    {
+      set ~par_cidr 0
+      set ~mask_1 0
+      set ~mask_2 0
+      set ~mask_3 0
+      set ~mask_4 0
+    }
+    else
+    {
+      set ~tmp #~par_cidr
+      set ~count 0
+      sp_sc_flow_while number cvar ~tmp >= val 8
+      {
+        add ~count 1
+        set ~mask_$~count 255
+        add ~tmp -8
+      }
+      sp_sc_flow_if number cvar ~tmp > val 0
+      {
+        set ~cidr_1 128
+        set ~cidr_2 192
+        set ~cidr_3 224
+        set ~cidr_4 240
+        set ~cidr_5 248
+        set ~cidr_6 252
+        set ~cidr_7 254
+        add ~count 1
+        sp_sc_cvar_copy ~mask_$~count ~cidr_$~tmp
+      }
+      sp_sc_flow_while number cvar ~count < val 4
+      {
+        add ~count 1
+        set ~mask_$~count 0
+      }
+    }
+  }
+
+  sp_sc_cvar_split ~ip "." ~par_ip
+  and ~ip_1 #~mask_1
+  and ~ip_2 #~mask_2
+  and ~ip_3 #~mask_3
+  and ~ip_4 #~mask_4
+
+  sp_sc_cvar_sset #~ret_ip_cidr #~ip_1 "." #~ip_2 "." #~ip_3 "." #~ip_4 "/" #~par_cidr
+}
+
+
+//
+// Convert dotted IP to hex
+//
+function spf_sc_ip_to_hex( ~par_ip, ~ret_ip_hex )
+{
+  set #~ret_ip_hex ""
+  sp_sc_cvar_split ~split "." ~par_ip
+  sp_sc_flow_if number cvar ~split_0 == val 4
+  {
+    set ~10 "a"
+    set ~11 "b"
+    set ~12 "c"
+    set ~13 "d"
+    set ~14 "e"
+    set ~15 "f"
+
+    set ~count 1
+    sp_sc_flow_while number cvar ~count <= val 4
+    {
+      sp_sc_cvar_copy ~high ~split_$~count
+      set ~low #~high
+
+      and ~high 240
+      sp_sc_cvar_math_div ~high 16
+      sp_sc_flow_if number cvar ~high > val 9
+      {
+        sp_sc_cvar_copy ~high ~$~high
+      }
+      sp_sc_cvar_append #~ret_ip_hex #~high
+
+      and ~low 15
+      sp_sc_flow_if number cvar ~low > val 9
+      {
+        sp_sc_cvar_copy ~low ~$~low
+      }
+      sp_sc_cvar_append #~ret_ip_hex #~low
+
+      add ~count 1
+    }
+  }
+}

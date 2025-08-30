@@ -1,0 +1,199 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Specify the gametype when the map is rotated
+//   [prefix|][gametype]:<mapname>
+// Examples:
+//   map ctf:dm/madrange (gametype ctf specified)
+//   map sometext|dm:dm/madrange (gametye dm specified)
+//   map dm/nycdm3 (no gametype specified, so the gametype will not change)
+//
+// The gametypes from the spf_sv_vote script have been reused. You can change
+// their settings in spf_sv_vote.func. You can also change this script to have
+// other gametypes.
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_maprotate_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_rotate "spf_sv_maprotate_on_map_rotate"
+}
+
+
+//
+// Map rotate
+//
+function spf_sv_maprotate_on_map_rotate()
+{
+  set ~restart_required 0
+
+  sp_sc_cvar_split ~split ":" _sp_sv_info_map_next
+  sp_sc_flow_if number cvar ~split_0 == val 1
+  {
+    set ~prefix ""
+    set ~prefix_separator ""
+    set ~map #~split_1
+  }
+  else
+  {
+    set ~prefix #~split_1
+    set ~prefix_separator ":"
+    set ~map #~split_2
+  }
+
+  sp_sc_flow_if text cvar ~map == val "dm/jpntclx"
+  {
+    set ~map "dm/jpnctf1"
+
+    sp_sc_cvar_sset _sp_sv_info_map_next #~prefix #~prefix_separator #~map
+  }
+
+  sp_sc_cvar_split ~split "|" ~prefix
+  sp_sc_cvar_copy ~gametype ~split_$~split_0
+
+  sp_sc_flow_if text cvar ~gametype != val ""
+  {
+      // Allow short gametype prefixes, because the total prefix length (up to the :) can't be longer then 16
+      sp_sc_flow_if text cvar ~gametype == val "ar"
+      {
+        set ~gametype "arsenal"
+      }
+      else
+      {
+        sp_sc_flow_if text cvar ~gametype == val "as"
+        {
+          set ~gametype "assassin"
+        }
+        else
+        {
+          sp_sc_flow_if text cvar ~gametype == val "con"
+          {
+            set ~gametype "control"
+          }
+          else
+          {
+            sp_sc_flow_if text cvar ~gametype == val "rl"
+            {
+              set ~gametype "realistic"
+            }
+            else
+            {
+              sp_sc_flow_if text cvar ~gametype == val "rbctb"
+              {
+                set ~gametype "redblue_ctb"
+              }
+              else
+              {
+                sp_sc_flow_if text cvar ~gametype == val "tdm"
+                {
+                  set ~gametype "team_dm"
+                }
+                else
+                {
+                  sp_sc_flow_if text cvar ~gametype == val "trl"
+                  {
+                    set ~gametype "team_realistic"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      sp_sc_flow_if text cvar ~gametype == val "arsenal"
+      {
+        sp_sc_func_exec spf_sv_vote_gametype_arsenal NO_MAPLIST_AND_MAP
+      }
+      else
+      {
+        sp_sc_flow_if text cvar ~gametype == val "assassin"
+        {
+          sp_sc_func_exec spf_sv_vote_gametype_assassin NO_MAPLIST_AND_MAP
+        }
+        else
+        {
+          sp_sc_flow_if text cvar ~gametype == val "control"
+          {
+            sp_sc_func_exec spf_sv_vote_gametype_control NO_MAPLIST_AND_MAP
+          }
+          else
+          {
+            sp_sc_flow_if text cvar ~gametype == val "ctb"
+            {
+              sp_sc_func_exec spf_sv_vote_gametype_ctb NO_MAPLIST_AND_MAP
+            }
+            else
+            {
+              sp_sc_flow_if text cvar ~gametype == val "ctf"
+              {
+                sp_sc_func_exec spf_sv_vote_gametype_ctf NO_MAPLIST_AND_MAP
+              }
+              else
+              {
+                sp_sc_flow_if text cvar ~gametype == val "dm"
+                {
+                  sp_sc_func_exec spf_sv_vote_gametype_dm NO_MAPLIST_AND_MAP
+                }
+                else
+                {
+                  sp_sc_flow_if text cvar ~gametype == val "realistic"
+                  {
+                    sp_sc_func_exec spf_sv_vote_gametype_realistic NO_MAPLIST_AND_MAP
+                  }
+                  else
+                  {
+                    sp_sc_flow_if text cvar ~gametype == val "redblue_ctb"
+                    {
+                      sp_sc_func_exec spf_sv_vote_gametype_redblue_ctb NO_MAPLIST_AND_MAP
+                    }
+                    else
+                    {
+                      sp_sc_flow_if text cvar ~gametype == val "team_dm"
+                      {
+                        sp_sc_func_exec spf_sv_vote_gametype_team_dm NO_MAPLIST_AND_MAP
+                      }
+                      else
+                      {
+                        sp_sc_flow_if text cvar ~gametype == val "team_realistic"
+                        {
+                          sp_sc_func_exec spf_sv_vote_gametype_team_realistic NO_MAPLIST_AND_MAP
+                        }
+                        else
+                        {
+                          echo "Warning: Unknown gametype for map:" #_sp_sv_info_map_next
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+  }
+
+  // Some settings changes require a server restart
+
+  sp_sc_cvar_copy_latched ~deathmatch deathmatch
+  sp_sc_flow_if text cvar ~deathmatch != cvar deathmatch
+  {
+    set ~restart_required 1
+  }
+
+  sp_sc_cvar_copy_latched ~dmflags dmflags
+  sp_sc_flow_if text cvar ~dmflags != cvar dmflags
+  {
+    set ~restart_required 1
+  }
+
+  sp_sc_flow_if number cvar ~restart_required != val 0
+  {
+    // Force 'map' command instead of 'gamemap' to restart the server by prepending a '!' to the next map name
+    sp_sc_cvar_sset _sp_sv_info_map_next "!" #_sp_sv_info_map_next
+  }
+}

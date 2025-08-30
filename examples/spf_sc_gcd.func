@@ -1,0 +1,32 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+
+//
+// Calculate GCD
+//
+function spf_sc_gcd( ~par_a, ~par_b, ~ret_gcd )
+{
+  set #~ret_gcd 1
+  sp_sc_flow_if number val #~par_a > val 0
+  {
+    sp_sc_flow_if number val #~par_b > val 0
+    {
+      sp_sc_flow_while number cvar ~par_a != cvar ~par_b
+      {
+        sp_sc_flow_if number val #~par_a > val #~par_b
+        {
+          add ~par_a -$~par_b
+        }
+        else
+        {
+          add ~par_b -$~par_a
+        }
+      }
+      set #~ret_gcd #~par_a
+    }
+  }
+}

@@ -1,0 +1,252 @@
+// ---------------------------------------------------------------------------
+// rcon extended : Some extra commands to give the admins more control against griefers.
+// ---------------------------------------------------------------------------
+function spf_sv_rcon_ext_init()
+{
+    sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_rcon_ext_on_map_begin"
+    
+    sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_disconnect "spf_sv_rcon_ext_on_cl_disc"
+    sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_rcon_ext_on_cl_join"
+
+    sp_sc_func_exec spf_sv_rcon_ext_on_map_begin
+
+    //ms for all jailees to be checked
+    set _spf_sv_jail_loopms 1000
+    //lives of hopping back in abuse
+    set _spf_sv_jail_maxlives 3
+    //votes required from other players in server to jail someone.
+    set _spf_sv_jail_maxvotes 3
+    
+    
+    sp_sc_func_exec spf_sv_rcon_ext_jail_loop
+}
+
+function spf_sv_rcon_ext_on_map_begin()
+{
+    set ~i 0
+    sp_sc_flow_while number cvar ~i < cvar maxclients
+    {
+        zero _spf_sv_rcon_jailed_$~i
+        set _spf_sv_rcon_jailed_lives_$~i 0
+
+        add ~i 1
+    }
+
+    set _spf_sv_jailed_count 0
+    //clear the jailee ip list.
+    zero _spf_sv_jail_iplist
+    //is voting in progress
+    zero _spf_sv_rcon_jailed_voting
+    zero _spf_sv_jail_votes
+
+    
+}
+
+function spf_sv_rcon_ext_on_cl_disc(*)
+{
+    zero _spf_sv_rcon_jailed_$~1
+    set _spf_sv_rcon_jailed_lives_$~1 0
+    
+}
+
+function spf_sv_rcon_ext_on_cl_join(*)
+{
+    //slot jailed
+    zero _spf_sv_rcon_jailed_$~1
+    //hop in lives
+    set _spf_sv_rcon_jailed_lives_$~1 0
+
+    sp_sc_flow_if number cvar _spf_sv_jailed_count > val 0
+    {
+
+        sp_sv_info_client #~1
+
+        //re-apply jailees if they reconnect during same map.
+        sp_sc_cvar_split ~split , _spf_sv_jail_iplist
+        
+        set ~i 1
+        
+        sp_sc_flow_while number cvar ~i <= cvar ~split_0
+        {
+            sp_sc_cvar_copy ~jailee_ip ~split_$~i
+            sp_sc_flow_if text cvar _sp_sv_info_client_ip == cvar ~jailee_ip
+            {
+                //a jailee has returned.
+                //they don't get their lives back.
+                sp_sc_cvar_copy _spf_sv_rcon_jailed_lives_$~1 _spf_sv_jail_maxlives
+                sp_sv_client_spec #~1
+                sp_sc_cvar_sset ~jailed _spf_sv_rcon_jailed_ #~1
+                set #~jailed 1
+
+                set ~msg "%03Welcome back prisoner%04, get back in your %02cell!"
+                sp_sc_cvar_unescape ~msg ~msg
+
+                sp_sv_print_client #~1 #~msg
+            }
+            add ~i 1
+        }
+    }
+}
+
+function spf_sv_rcon_ext_jail_loop()
+{
+    sp_sc_flow_if number cvar _spf_sv_jailed_count > val 0
+    {
+        set ~i 0
+        sp_sc_flow_while number cvar ~i < cvar maxclients
+        {
+            sp_sv_info_client $~i
+            sp_sc_flow_if text cvar _sp_sv_info_client_ip != val ""
+            {
+                sp_sc_cvar_copy ~jailed _spf_sv_rcon_jailed_$~i
+                sp_sc_flow_if text cvar ~jailed != val ""
+                {
+            
+                    //is the jailee out of spec?
+                    sp_sc_flow_if number cvar _sp_sv_info_client_spectator == val 0
+                    {
+                        sp_sc_flow_if number cvar _spf_sv_rcon_jailed_lives_$~i > cvar _spf_sv_jail_maxlives
+                        {
+                            //out of lives so kick
+                            kick $~i
+                        }
+                        else
+                        {
+                            //put him back into spec, decrement life
+                            sp_sv_client_spec $~i
+                            add _spf_sv_rcon_jailed_lives_$~i 1
+                        }
+                
+                    }
+                }
+            }
+        
+            add ~i 1
+        }
+    }
+
+    sp_sc_timer #_spf_sv_jail_loopms "sp_sc_func_exec spf_sv_rcon_ext_jail_loop" 
+}
+
+function spf_sv_rcon_ext_jail_vote_loop(~jailee_slot, ~admin_name , ~jailee_name , ~jailee_ip, ~start_time)
+{
+    
+    sp_sc_cvar_copy ~votes_needed _spf_sv_jail_maxvotes 
+    sp_sc_cvar_math_sub ~votes_needed _spf_sv_jail_votes
+
+    set ~vote_ended 0
+    //do once
+    sp_sc_flow_if text cvar _spf_sv_rcon_jailed_voting == val ""
+    {
+        sset ~msg Admin #~admin_name has voted to jail #~jailee_name ... supply #~votes_needed votes if guilty.
+        sp_sv_print_broadcast #~msg
+
+        //Voting in progress
+        set _spf_sv_rcon_jailed_voting 1
+    }
+    else
+    {
+
+        sp_sc_flow_if number cvar _spf_sv_jail_votes >= cvar _spf_sv_jail_maxvotes
+        {
+            set ~vote_ended 1
+
+            add _spf_sv_jailed_count 1
+            //perform the jail - guilty
+            sp_sv_client_spec #~jailee_slot
+            sp_sc_cvar_sset ~jailed _spf_sv_rcon_jailed_ #~jailee_slot
+            set #~jailed 1
+
+            
+            sp_sc_func_exec spf_sc_list_add _spf_sv_jail_iplist #~jailee_ip ","
+
+            sset ~msg %04Atleast #_spf_sv_jail_maxvotes players in the server have agreed to jail $02you. %04Report abuse to discord. Else learn your lesson.
+            sp_sc_cvar_unescape ~msg ~msg
+            sp_sv_print_client #~jailee_slot #~msg
+        }
+        else
+        {
+            sset ~msg %04Jail #~jailee_name %04vote active. #~votes_needed votes until jail. Are they guilty? type %03.jail %04if they are.
+            sp_sc_cvar_unescape ~msg ~msg
+            sp_sv_print_broadcast #~msg
+        }
+        
+    }
+    
+    
+
+    sp_sc_info_time
+    sp_sc_cvar_math_sub _sp_sc_info_time_sec #~start_time
+    sp_sc_flow_if number cvar _sp_sc_info_time_sec > val 30
+    {
+        set ~vote_ended 1
+        sset ~msg %04Vote to kick #~jailee_name %02failed %04: assume %03innocent.
+        sp_sc_cvar_unescape ~msg ~msg
+        sp_sv_print_broadcast #~msg
+    }
+    
+
+    sp_sc_flow_if number cvar ~vote_ended == val 0
+    {
+        sset ~cmd sp_sc_func_exec spf_sv_rcon_ext_jail_vote_loop #~jailee_slot #~admin_name #~jailee_name #~jailee_ip #~start_time
+        sp_sc_timer 5000 #~cmd
+    }
+    else
+    {
+        //Voting has ended.
+        //Allow other votes to start. Reset variables.
+        zero _spf_sv_rcon_jailed_voting
+        zero _spf_sv_jail_votes
+
+    }
+}
+
+//add this line into spf_sv_rcon.func file
+//set ~command_jail "spf_sv_rcon_jail;1;.rcon jail <slot>"
+//and add jail to the spf_sv_gamepark.func file also
+function spf_sv_rcon_jail( ~par_slot, ~par_jail_slot )
+{
+    //voting in progress
+    sp_sc_flow_if text cvar _spf_sv_rcon_jailed_voting == val ""
+    {
+        sp_sv_info_client #~par_jail_slot
+
+        sp_sc_flow_if text cvar _sp_sv_info_client_ip != val ""
+        {
+            sp_sv_print_client #~par_slot "OK: Started vote to jail the accused."
+
+            sp_sc_cvar_copy ~jailee_name _sp_sv_info_client_name
+
+            echo slot #~par_slot voted to jail #~par_jail_slot
+            
+            //start the vote
+            set _spf_sv_jail_votes 1 
+            sp_sv_info_client #~par_slot
+            sp_sc_cvar_copy ~admin_name _sp_sv_info_client_name 
+        
+            sp_sc_info_time
+            sp_sc_func_exec spf_sv_rcon_ext_jail_vote_loop #~par_jail_slot #~admin_name #~jailee_name #_sp_sv_info_client_ip #_sp_sc_info_time_sec
+        }
+        else
+        {
+            sp_sv_print_client #~par_slot "ERROR: Provided slot id is not in use."
+        }
+        
+    }
+    else
+    {
+        sp_sv_print_client #~par_slot "ERROR: Jail voting is already in progress, try again later."
+    }
+    
+}
+
+function .jail(~par_slot, *)
+{
+    //vote in progress
+    sp_sc_flow_if text cvar _spf_sv_rcon_jailed_voting != val ""
+    {
+        add _spf_sv_jail_votes 1
+        sset ~msg "Received a vote to jail the accused. type .jail if you agree" 
+        sp_sv_print_broadcast  #~msg
+    }
+}

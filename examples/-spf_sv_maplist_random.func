@@ -1,0 +1,80 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Random maplist
+//   Randomize at map start
+//   Randomize with spa_sv_maplist_random command
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_maplist_random_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_maplist_random_on_map_begin"
+
+  sp_sc_func_alias spa_sv_maplist_random spf_sv_maplist_random_randomize
+
+  sp_sc_exec_file sofplus/addons/spf_sv_maplist_random.cfg
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_maplist_random_on_map_begin()
+{
+  sp_sc_flow_if number val #_spf_sv_maplist_random == val 1
+  {
+    sp_sc_flow_if text val #sv_maplistfile != val ""
+    {
+      sp_sc_func_exec spf_sv_maplist_random_randomize
+    }
+  }
+  else
+  {
+    sp_sc_flow_if number val #_spf_sv_maplist_random == val 2
+    {
+      sp_sc_func_exec spf_sv_maplist_random_randomize
+    }
+  }
+
+  // If sv_maplistfile isn't empty, the server will overwrite sv_maplist at map end
+  zero sv_maplistfile
+}
+
+
+//
+// Randomize
+//
+function spf_sv_maplist_random_randomize()
+{
+  // Put all maps in separate cvars
+  sp_sc_cvar_split ~map "," sv_maplist
+
+  // Empty maplist
+  zero sv_maplist
+
+  // Process all maps from the original list
+  sp_sc_flow_while number cvar ~map_0 > val 0
+  {
+    // Pick a random map
+    sp_sc_cvar_random_int ~pos 1 #~map_0
+    sp_sc_flow_if text cvar ~map_$~pos !=  val ""
+    {
+      sp_sc_cvar_append sv_maplist ","
+      sp_sc_cvar_copy sv_maplist sv_maplist ~map_$~pos
+    }
+
+    // Remove the added map from the list of choices
+    sp_sc_flow_while number cvar ~pos < cvar ~map_0
+    {
+      set ~pos_dst #~pos
+      add ~pos 1
+      sp_sc_cvar_copy ~map_$~pos_dst ~map_$~pos
+    }
+
+    add ~map_0 -1
+  }
+}

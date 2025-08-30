@@ -1,0 +1,93 @@
+function menu_transport_init()
+{
+  //thread_create 100 myloop loopref
+  //thread_stop $loopref
+
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin menu_transport_client_begin
+
+  //slot variables
+  //set ~i 0
+  //sp_sc_flow_while number cvar ~i < val 16
+  //{
+  //  sp_sc_func_exec menu_transport_slot_clear $~i
+  //  add ~i 1
+  //}
+}
+
+function menu_transport_slot_clear(~slot)
+{
+  //_menu_trans_{SLOT}_inuse
+  sp_sc_cvar_sset ~inuse_cvar _menu_trans_ $~i _inuse
+  set #~inuse_cvar 0
+
+  //_menu_trans_{SLOT}_chunkIdx
+  sp_sc_cvar_sset ~idx_cvar _menu_trans_ $~i _chunkIdx
+  set #~idx_cvar 0
+}
+
+function menu_transport_client_begin(~slot)
+{
+  sp_sc_func_exec menu_transport_slot_clear $~slot
+}
+
+//for each menu - fill up the rfm tank
+function menu_transport_buffer_init(~menu_name, ~data)
+{
+  
+  
+}
+
+
+function menu_transport_chunk_data()
+{
+
+
+}
+
+//sends a chunk
+function menu_transport_send_inner(~who, ~inuse_cvar)
+{
+  //We need chunk index.
+  sp_sc_flow_if number cvar #~inuse_cvar == val 1
+  {
+    echo already in-use... What to do here?   
+  }
+  else
+  {
+    set #~inuse_cvar 1
+
+    //_dyn_menus_{MENUNAME}_buffer
+    sp_sc_cvar_sset ~tmp _dyn_menus_ $~menu_name _buffer
+    sp_sc_cvar_copy ~data #~tmp 
+
+    //stufftext set _sp_cl_sv_99 $~data
+    sp_sv_client_cvar_set $~who 99 #~data
+  }
+}
+//_dyn_menus_{MENUNAME}_buffer expected to already contain the rfm
+function menu_transport_send(~who, ~menu_name)
+{
+  thread_create 100 myloop loopref
+
+  sp_sc_flow_if number cvar ~who == val -1
+  {
+    //everyone
+    set ~i 0
+    sp_sc_flow_while number cvar ~i < cvar _sp_sv_info_num_players
+    {
+      //_menu_trans_{SLOT}_inuse
+      sp_sc_cvar_sset ~inusecvar _menu_trans_ $~i _inuse
+      sp_sc_func_exec menu_transport_send_inner $~i $~inusecvar
+      add ~i 1
+    }
+  } else
+  {
+    //1 slot
+    //_menu_trans_{SLOT}_inuse
+    sp_sc_cvar_sset ~inusecvar _menu_trans_ $~who _inuse
+    sp_sc_func_exec menu_transport_send_inner $~who $~inusecvar
+  }
+
+
+  
+}

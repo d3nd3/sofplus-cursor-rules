@@ -1,0 +1,4 @@
+function cl_maps_init()
+{
+  echo "lol"
+}

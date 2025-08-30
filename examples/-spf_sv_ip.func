@@ -1,0 +1,131 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Perform actions on players, based on their IP address
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_ip_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_ip_check"
+}
+
+
+//
+// Special client?
+//
+function spf_sv_ip_check( ~par_slot )
+{
+  // Read addresses
+  sp_sc_exec_file sofplus/addons/spf_sv_ip_pre.cfg
+
+  // Read extra addresses from the file that gets written by the '.rcon ip_*' commands
+  sp_sc_exec_file sofplus/data/spf_sv_ip.cfg
+
+  // These addresses can not be manipulated with the '.rcon ip_*' commands:
+  sp_sc_exec_file sofplus/addons/spf_sv_ip_post.cfg
+
+  sp_sv_info_client #~par_slot
+  set ~cidr 32
+  sp_sc_flow_while number cvar ~cidr >= val 0
+  {
+    sp_sc_func_exec spf_sc_ip_to_cidr #_sp_sv_info_client_ip #~cidr _ret_1
+    sp_sc_flow_if text cvar ~ip_$_ret_1 != val ""
+    {
+      sp_sc_cvar_copy ~value ~ip_$_ret_1
+
+      sp_sc_cvar_split ~split ";" ~value
+      sp_sc_flow_if number cvar ~split_0 >= val 2
+      {
+        set ~action #~split_1
+        // Ignore entries with action 'remove'
+        sp_sc_flow_if text cvar ~action != val "remove"
+        {
+          // All other actions should stop the loop
+          set ~cidr 0
+
+          set ~message #~split_2
+          set ~color_normal "%04"
+          sp_sc_cvar_unescape ~color_normal ~color_normal
+          set ~color_highlight "%07"
+          sp_sc_cvar_unescape ~color_highlight ~color_highlight
+          sp_sc_flow_if text cvar ~action == val "ban"
+          {
+            // Message to all clients
+            sp_sc_cvar_sset ~msg #~color_normal "Client ban " #~color_highlight #_sp_sv_info_client_name #~color_normal ": " #~message
+            sp_sv_print_broadcast #~msg
+            // Message for server log
+            sp_sc_cvar_sset ~msg "Client ban " #_sp_sv_info_client_ip " " #_sp_sv_info_client_name ": " #~message
+            echo #~msg
+
+            // Kick the player
+            kick #~par_slot
+            // Ban
+            filter_add #_sp_sv_info_client_ip
+          }
+          else
+          {
+            sp_sc_flow_if text cvar ~action == val "info"
+            {
+              // Message to all clients
+              sp_sc_cvar_sset ~msg #~color_normal "Client info " #~color_highlight #_sp_sv_info_client_name #~color_normal ": " #~message
+              sp_sv_print_broadcast #~msg
+              // Message for server log
+              sp_sc_cvar_sset ~msg "Client info " #_sp_sv_info_client_ip " " #_sp_sv_info_client_name ": " #~message
+              echo #~msg
+            }
+            else
+            {
+              sp_sc_flow_if text cvar ~action == val "kick"
+              {
+                // Message to all clients
+                sp_sc_cvar_sset ~msg #~color_normal "Client kick " #~color_highlight #_sp_sv_info_client_name #~color_normal ": " #~message
+                sp_sv_print_broadcast #~msg
+                // Message for server log
+                sp_sc_cvar_sset ~msg "Client kick " #_sp_sv_info_client_ip " " #_sp_sv_info_client_name ": " #~message
+                echo #~msg
+
+                // Kick the player with a short delay to allow a .rcon admin to change the IP action
+                sp_sc_cvar_sset ~cmd "sp_sc_func_exec spf_sv_ip_kick " #~par_slot " " #_sp_sv_info_client_ip
+                sp_sc_timer 2000 #~cmd
+              }
+              else
+              {
+                sp_sc_flow_if text cvar ~action == val "mute"
+                {
+                  // Message to all clients
+                  sp_sc_cvar_sset ~msg #~color_normal "Client mute " #~color_highlight #_sp_sv_info_client_name #~color_normal ": " #~message
+                  sp_sv_print_broadcast #~msg
+                  // Message for server log
+                  sp_sc_cvar_sset ~msg "Client mute " #_sp_sv_info_client_ip " " #_sp_sv_info_client_name ": " #~message
+                  echo #~msg
+
+                  // Mute the player
+                  sp_sv_say_mute #~par_slot
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    add ~cidr -1
+  }
+}
+
+
+//
+// Kick player
+//
+function spf_sv_ip_kick( ~par_slot, ~par_ip )
+{
+  sp_sv_info_client #~par_slot
+  sp_sc_flow_if text cvar _sp_sv_info_client_ip == cvar ~par_ip
+  {
+    // Kick the player
+    kick #~par_slot
+  }
+}

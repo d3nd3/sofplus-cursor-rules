@@ -1,0 +1,23 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// DendeBot detection by swapping players to the opposite team
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_dendebot_swap_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_dendebot_swap_on_client_begin"
+}
+
+
+//
+// Swap when a player enters
+//
+function spf_sv_dendebot_swap_on_client_begin( ~par_slot )
+{
+  sp_sv_client_swap #~par_slot
+}

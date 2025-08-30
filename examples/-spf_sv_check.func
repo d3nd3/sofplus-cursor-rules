@@ -1,0 +1,663 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Check some client cvars
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_check_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_check_on_map_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_check_on_client_begin"
+
+  // For internal use, don't change!
+  set _spf_sv_check_timeout 0
+  set _spf_sv_check_slot -1
+  set _spf_sv_check_ip ""
+  set _spf_sv_check_name ""
+  set _spf_sv_check_id ""
+  set _spf_sv_check_cvar ""
+  set _spf_sv_check_cvar_1 "cl_minfps"
+  set _spf_sv_check_cvar_2 "cl_minfps"
+  set _spf_sv_check_cvar_3 "cl_minfps"
+  set _spf_sv_check_cvar_4 "cl_minfps"
+  set _spf_sv_check_cvar_5 "cl_maxfps"
+  set _spf_sv_check_cvar_6 "cl_maxfps"
+  set _spf_sv_check_cvar_7 "cl_maxfps"
+  set _spf_sv_check_cvar_8 "cl_maxfps"
+  set _spf_sv_check_cvar_9 "gl_drawmode"
+  set _spf_sv_check_cvar_10 "gl_drawmode"
+  set _spf_sv_check_cvar_11 "gl_drawmode"
+  set _spf_sv_check_cvar_12 "gl_drawmode"
+  set _spf_sv_check_cvar_13 "r_nearclipdist"
+  set _spf_sv_check_cvar_14 "r_nearclipdist"
+  set _spf_sv_check_cvar_15 "r_nearclipdist"
+  set _spf_sv_check_cvar_16 "r_nearclipdist"
+  set _spf_sv_check_cvar_17 "gl_driver"
+  set _spf_sv_check_cvar_18 "gl_driver"
+  set _spf_sv_check_cvar_19 "gl_dlightintensity"
+  set _spf_sv_check_cvar_20 "gl_modulate"
+  set _spf_sv_check_cvar_21 "ghl_shadow_dist"
+  set _spf_sv_check_cvar_22 "cl_testlights"
+  set _spf_sv_check_cvar_23 "gl_drawflat"
+  set _spf_sv_check_cvar_24 "gl_fogmode"
+  set _spf_sv_check_cvar_25 "gl_lockpvs"
+  set _spf_sv_check_cvar_26 "gl_showtris"
+  set _spf_sv_check_cvar_27 "r_fullbright"
+  set _spf_sv_check_cvar_28 "r_drawworld"
+  set _spf_sv_check_cvar_29 "gl_nobind"
+  set _spf_sv_check_cvar_30 "gl_nobind"
+  set _spf_sv_check_cvar_31 "gl_nobind"
+  set _spf_sv_check_cvar_32 "gl_nobind"
+  set _spf_sv_check_cvar_33 "cl_testblend"
+  set _spf_sv_check_cvar_count 33
+//  set _spf_sv_check_cvar_34 "cl_gun"
+//  set _spf_sv_check_cvar_35 "gl_picmip"
+//  set _spf_sv_check_cvar_36 "scr_interface"
+//  set _spf_sv_check_cvar_count 36
+}
+
+
+//
+// Print check version
+//
+function .cvarcheck( ~par_slot )
+{
+  sp_sv_print_client #~par_slot 20140330
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_check_on_map_begin()
+{
+  set _spf_sv_check_timeout 0
+  set _spf_sv_check_slot -1
+  set _spf_sv_check_ip ""
+  set _spf_sv_check_name ""
+  set _spf_sv_check_id ""
+  set _spf_sv_check_cvar ""
+
+  // Wait 20 seconds before the first check, because no client can be in the server yet
+  sset ~cmd "sp_sc_func_exec spf_sv_check_start" #_sp_sv_info_map_count
+  sp_sc_timer 20000 #~cmd
+}
+
+
+//
+// Reset cvar violation counter
+//
+function spf_sv_check_on_client_begin( ~par_slot )
+{
+  set _spf_sv_check_violation_$~par_slot 0
+  set _spf_sv_check_no_response_$~par_slot 0
+}
+
+
+//
+// Start a new check
+//
+function spf_sv_check_start( ~par_lc )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    // Finish previous check
+    sp_sc_flow_if number val #_spf_sv_check_slot != val -1
+    {
+      // No response (1 in every 8 packets may get lost)
+      add _spf_sv_check_no_response_$_spf_sv_check_slot 7
+      sp_sc_cvar_sset ~log "\check\no response\" #_spf_sv_check_slot "\" #_spf_sv_check_cvar
+      echo #~log
+
+      // Too many times no response?
+      sp_sc_flow_if number cvar _spf_sv_check_no_response_$_spf_sv_check_slot >= val 70
+      {
+        // Message to client
+        sp_sv_print_client #_spf_sv_check_slot "Error: Too many lost cvar queries"
+        sp_sv_print_client #_spf_sv_check_slot "       If you're using SoFplus 1.4, upgrade to version 1.4t9 or greater"
+
+        // Message to all
+        sp_sv_info_client #_spf_sv_check_slot
+        sp_sc_cvar_sset ~msg "Kicking player " #_spf_sv_check_slot " for lost cvar queries: " #_spf_sv_check_name
+        sp_sv_print_broadcast #~msg
+
+        // Schedule the kick
+        sset ~cmd "sp_sc_func_exec spf_sv_check_kick" #_spf_sv_check_slot #_spf_sv_check_ip
+        sp_sc_timer 8000 #~cmd
+      }
+    }
+
+    // Start new check
+
+    // Default is no check
+    set _spf_sv_check_slot -1
+
+    set ~count #_sp_sv_info_num_players
+    add ~count #_sp_sv_info_num_spectators
+    sp_sc_flow_if number val #~count > val 0
+    {
+      sp_sc_flow_while number cvar _spf_sv_check_slot == val -1
+      {
+        // What client to query?
+        sp_sc_cvar_random_int _spf_sv_check_slot 1 #maxclients
+        add _spf_sv_check_slot -1
+
+        sp_sv_info_client #_spf_sv_check_slot
+        sp_sc_flow_if text val #_sp_sv_info_client_ip != val ""
+        {
+          // The client should respond within 40 frames (4 seconds)
+          // That should be long enough, even with some packet loss and retransmits
+          sp_sv_info_frames
+          set _spf_sv_check_timeout #_sp_sv_info_frames
+          add _spf_sv_check_timeout 40
+
+          set _spf_sv_check_ip #_sp_sv_info_client_ip
+          set _spf_sv_check_name #_sp_sv_info_client_name
+
+          // Random id
+          sp_sc_cvar_random_int _spf_sv_check_id 1000 9999
+          sp_sc_cvar_random_int ~id 1000 9999
+          sp_sc_cvar_append _spf_sv_check_id #~id
+
+          // What check to perform?
+          sp_sc_cvar_random_int _spf_sv_check_cvar 1 #_spf_sv_check_cvar_count
+          sp_sc_cvar_copy _spf_sv_check_cvar _spf_sv_check_cvar_$_spf_sv_check_cvar
+
+          // Query client
+          sp_sv_client_check #_spf_sv_check_slot #_spf_sv_check_id #_spf_sv_check_cvar
+
+          //echo "DBG - Checking:" #_spf_sv_check_slot #_spf_sv_check_id #_spf_sv_check_cvar
+        }
+        else
+        {
+          // Try another slot
+          set _spf_sv_check_slot -1
+        }
+      }
+    }
+
+    // Schedule next check (wait more than 4 seconds, because a client has that long to respond)
+    sset ~cmd "sp_sc_func_exec spf_sv_check_start" #_sp_sv_info_map_count
+    sp_sc_cvar_random_int ~time 4200 4400
+    sp_sc_timer #~time #~cmd
+  }
+}
+
+
+function .check( ~par_slot, ~par_id, ~par_cvar, ~par_val )
+{
+  sp_sc_flow_if number val #~par_slot == val #_spf_sv_check_slot
+  {
+    sp_sv_info_client #~par_slot
+
+    sp_sc_flow_if text val #_sp_sv_info_client_ip == val #_spf_sv_check_ip
+    {
+      // Kick description
+      set ~desc ""
+
+      sp_sc_flow_if text val #~par_id == val #_spf_sv_check_id
+      {
+        sp_sc_flow_if text val #~par_cvar == val #_spf_sv_check_cvar
+        {
+          sp_sc_func_exec spf_sv_check_process_$_spf_sv_check_cvar #~par_slot #~par_val _ret_1 _ret_2
+          set ~ret_violation_code #_ret_1
+          set ~ret_violation_desc #_ret_2
+
+          sp_sc_flow_if number val #~ret_violation_code == val 0
+          {
+            sp_sv_info_frames
+            sp_sc_flow_if number val #_sp_sv_info_frames > val #_spf_sv_check_timeout
+            {
+              // Too late (player may have had time to tamper)
+              add _spf_sv_check_violation_$_spf_sv_check_slot 1
+              sp_sc_cvar_sset ~log "\check\too late\" #_spf_sv_check_slot "\" #_spf_sv_check_cvar
+              echo #~log
+            }
+          }
+          else
+          {
+            // Wrong value
+            add _spf_sv_check_violation_$_spf_sv_check_slot #~ret_violation_code
+            sp_sc_cvar_sset ~log "\check\wrong value\" #_spf_sv_check_slot "\" #_spf_sv_check_cvar "\" #~par_val
+            echo #~log
+
+            // Remember violation description for kicking
+            sp_sc_cvar_sset ~desc " (" #~ret_violation_desc ")"
+          }
+        }
+        else
+        {
+          // Wrong cvar
+          add _spf_sv_check_violation_$_spf_sv_check_slot 1
+          sp_sc_cvar_sset ~log "\check\wrong cvar\" #_spf_sv_check_slot "\" #_spf_sv_check_cvar "\" #~par_cvar "\" #~par_val
+          echo #~log
+
+          // Kick description
+          set ~desc " (invalid check response)"
+        }
+      }
+      else
+      {
+        // Wrong ID
+        add _spf_sv_check_violation_$_spf_sv_check_slot 1
+        sp_sc_cvar_sset ~log "\check\wrong id\" #_spf_sv_check_slot "\" #_spf_sv_check_cvar
+        echo #~log
+
+        // Kick description
+        set ~desc " (invalid check response)"
+      }
+
+      // Too many violations?
+      sp_sc_flow_if number cvar _spf_sv_check_violation_$_spf_sv_check_slot > val 3
+      {
+        // Message to all
+        sp_sc_cvar_sset ~msg "Kicking player " #_spf_sv_check_slot " for cvar violations" #~desc ": " #_spf_sv_check_name
+        sp_sv_print_broadcast #~msg
+
+        // Schedule the kick
+        sset ~cmd "sp_sc_func_exec spf_sv_check_kick" #_spf_sv_check_slot #_spf_sv_check_ip
+        sp_sc_timer 8000 #~cmd
+      }
+
+      // Good packet, reduce the no_response counter a bit to allow some packet loss
+      sp_sc_flow_if number cvar _spf_sv_check_no_response_$_spf_sv_check_slot > val 0
+      {
+        add _spf_sv_check_no_response_$_spf_sv_check_slot -1
+      }
+
+      // Done with this check
+      set _spf_sv_check_slot -1
+    }
+  }
+}
+
+
+//
+// cl_minfps
+//   >= 0
+//   <= 30
+//
+function spf_sv_check_process_cl_minfps( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val < val 0
+  {
+    set #~ret_desc "speeding"
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: cl_minfps must be greater than or equal to 0 and lesss than or equal to 30"
+  }
+  else
+  {
+    sp_sc_flow_if number val #~par_val > val 30
+    {
+      set #~ret_desc "fps"
+      set #~ret_code 1
+      sp_sv_print_client #~par_slot "Error: cl_minfps must be greater than or equal to 0 and lesss than or equal to 30"
+    }
+  }
+}
+
+
+//
+// cl_maxfps
+//   >= 10
+//   <= _sp_sv_fps_max (only when _sp_sv_fps_max > 0)
+//
+function spf_sv_check_process_cl_maxfps( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "fps"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val < val 10
+  {
+    set #~ret_code 99
+    sp_sc_flow_if number val #_sp_sv_fps_max > val 0
+    {
+      sp_sc_cvar_sset ~msg "Error: cl_maxfps must be greater than or equal to 10 and lesss than or equal to " #_sp_sv_fps_max
+      sp_sv_print_client #~par_slot #~msg
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "Error: cl_maxfps must be greater than or equal to 10"
+    }
+  }
+  else
+  {
+    sp_sc_flow_if number val #_sp_sv_fps_max > val 0
+    {
+      sp_sc_flow_if number val #~par_val > val #_sp_sv_fps_max
+      {
+        set #~ret_code 1
+        sp_sc_cvar_sset ~msg "Error: cl_maxfps must be greater than or equal to 10 and lesss than or equal to " #_sp_sv_fps_max
+        sp_sv_print_client #~par_slot #~msg
+      }
+    }
+  }
+}
+
+
+//
+// gl_dlightintensity
+//   <= 2
+//
+function spf_sv_check_process_gl_dlightintensity( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "brightness"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val > val 2
+  {
+    set #~ret_code 1
+    sp_sv_print_client #~par_slot "Error: gl_dlightintensity must be less than or equal to 2"
+  }
+}
+
+
+//
+// gl_drawmode
+//   0
+//
+function spf_sv_check_process_gl_drawmode( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "wallhack"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// gl_modulate
+//   > 0
+//   <= 4
+//
+function spf_sv_check_process_gl_modulate( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "brightness"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val <= val 0
+  {
+    set #~ret_code 1
+    sp_sv_print_client #~par_slot "Error: gl_modulate must be greater than 0 and lesss than or equal to 4"
+  }
+  else
+  {
+    sp_sc_flow_if number val #~par_val > val 4
+    {
+      set #~ret_code 1
+      sp_sv_print_client #~par_slot "Error: gl_modulate must be greater than 0 and lesss than or equal to 4"
+    }
+  }
+}
+
+
+//
+// r_nearclipdist
+//   <= 4 (only when playing)
+//
+function spf_sv_check_process_r_nearclipdist( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "wallhack"
+  set #~ret_code 0
+  sp_sc_flow_if number val #_sp_sv_info_client_spectator == val 0
+  {
+    sp_sc_flow_if number val #~par_val > val 4
+    {
+      set #~ret_code 99
+      sp_sv_print_client #~par_slot "Error: r_nearclipdist must be lesss than or equal to 4"
+    }
+  }
+}
+
+
+//
+// gl_driver
+//   "" for WaX clients
+//   "opengl32" for non-WaX clients
+//
+function spf_sv_check_process_gl_driver( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "video driver / wallhack"
+  set #~ret_code 0
+  sp_sc_flow_if text val #~par_val != val ""
+  {
+    sp_sc_flow_if itext val #~par_val != val "opengl32"
+    {
+      sp_sc_flow_if itext val #~par_val != val "3dfxvgl"
+      {
+        sp_sc_flow_if itext val #~par_val != val "qeffectsgl"
+        {
+          set #~ret_code 99
+          sp_sv_print_client #~par_slot "Error: gl_driver must be opengl32, 3dfxvgl or qeffectsgl"
+        }
+      }
+    }
+  }
+}
+
+
+//
+// ghl_shadow_dist
+//   <= 25
+//
+function spf_sv_check_process_ghl_shadow_dist( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "shadow distance"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val > val 25
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: ghl_shadow_dist must be less than or equal to 25"
+  }
+}
+
+
+//
+// cl_testlights
+//   0
+//
+function spf_sv_check_process_cl_testlights( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// gl_drawflat
+//   0
+//
+function spf_sv_check_process_gl_drawflat( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// gl_fogmode
+//   0
+//
+function spf_sv_check_process_gl_fogmode( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// gl_lockpvs
+//   0
+//
+function spf_sv_check_process_gl_lockpvs( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// gl_showtris
+//   0
+//
+function spf_sv_check_process_gl_showtris( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// r_fullbright
+//   0
+//
+function spf_sv_check_process_r_fullbright( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// r_drawworld
+//   1
+//
+function spf_sv_check_process_r_drawworld( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "modified SoF.exe"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 1
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: Invalid SoF.exe"
+  }
+}
+
+
+//
+// gl_nobind
+//   0
+//
+function spf_sv_check_process_gl_nobind( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "wallhack"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: gl_nobind must be 0"
+  }
+}
+
+
+//
+// cl_testblend
+//   0
+//
+function spf_sv_check_process_cl_testblend( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "no flash"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 0
+  {
+    set #~ret_code 99
+    sp_sv_print_client #~par_slot "Error: cl_testblend must be 0"
+  }
+}
+
+
+//
+// cl_gun
+//   = 1
+//
+function spf_sv_check_process_cl_gun( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "cl_gun"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 1
+  {
+    set #~ret_code 1
+    sp_sv_print_client #~par_slot "Error: cl_gun must be equal to 1"
+  }
+}
+
+
+//
+// gl_picmip
+//   <= 3
+//
+function spf_sv_check_process_gl_picmip( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "gl_picmip"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val > val 3
+  {
+    set #~ret_code 1
+    sp_sv_print_client #~par_slot "Error: gl_picmip must be lesss than or equal to 3"
+  }
+}
+
+
+//
+// scr_interface
+//   = 1
+//
+function spf_sv_check_process_scr_interface( ~par_slot, ~par_val, ~ret_code, ~ret_desc )
+{
+  set #~ret_desc "scr_interface"
+  set #~ret_code 0
+  sp_sc_flow_if number val #~par_val != val 1
+  {
+    set #~ret_code 1
+    sp_sv_print_client #~par_slot "Error: scr_interface must be equal to 1"
+  }
+}
+
+
+//
+// Kick
+//
+function spf_sv_check_kick( ~par_slot, ~par_ip )
+{
+  sp_sv_info_client #~par_slot
+  sp_sc_flow_if text val #_sp_sv_info_client_ip == val #~par_ip
+  {
+    kick #~par_slot
+  }
+}

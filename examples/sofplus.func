@@ -1,0 +1,24 @@
+// SoFplus
+
+function sofplus_init()
+{
+  // Load generic functions
+  sp_sc_func_load_file sofplus/sofplus_sc.func
+  sp_sc_func_exec sofplus_sc_init
+
+  // Load and execute client or server specific functions
+  sp_sc_flow_if number val #dedicated == val 0
+  {
+    sp_sc_func_load_file sofplus/sofplus_cl.func
+    sp_sc_func_exec sofplus_cl_init
+  }
+  else
+  {
+    sp_sc_func_load_file sofplus/sofplus_sv.func
+    sp_sc_func_exec sofplus_sv_init
+  }
+
+  // Load addons last
+  sp_sc_func_load_file sofplus/spf_sc_addons.func
+  sp_sc_func_exec spf_sc_addons_init
+}

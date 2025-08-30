@@ -1,0 +1,170 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Highscore accounting
+//
+// To request a list of the 20 best players:
+//   .best
+//
+// Notes:
+// - To use frags instead of score, replace _sp_sv_info_client_score by _sp_sv_info_client_frags
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_highscore_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_highscore_on_map_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_end "spf_sv_highscore_on_map_end"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_highscore_on_client_begin"
+
+  sp_sc_exec_file sofplus/addons/spf_sv_highscore.cfg
+}
+
+
+//
+// .best
+//
+function .best( ~par_slot )
+{
+  sp_sc_func_exec spf_sv_highscore_print_best #~par_slot
+}
+
+
+//
+// Load highscores on map begin
+//
+function spf_sv_highscore_on_map_begin()
+{
+  // Init to none
+  set ~tmp 1
+  sp_sc_flow_while number cvar ~tmp <= val 20
+  {
+    zero _spf_sv_highscore_name_$~tmp
+    set _spf_sv_highscore_frag_$~tmp 0
+    set _hs$~tmp "                   "
+    add ~tmp 1
+  }
+
+  // Try to read highscore
+  sp_sc_cvar_sset ~tmp "sofplus/data/highscore/" #mapname ".cfg"
+  sp_sc_exec_file #~tmp
+}
+
+
+//
+// Compute highscore on map end and print them
+//
+function spf_sv_highscore_on_map_end()
+{
+  // Check all current players
+  set ~slot 0
+  sp_sc_flow_while number cvar ~slot < val #maxclients
+  {
+    // get player info
+    zero _sp_sv_info_client_ip
+    sp_sv_info_client #~slot
+
+    // Player exists?
+    sp_sc_flow_if number val #_sp_sv_info_client_ip != val ""
+    {
+      // Player frags > frags in the list? (players with frags 0 or lower will never get in the list)
+      sp_sc_flow_if number val #_sp_sv_info_client_score > val #_spf_sv_highscore_frag_20
+      {
+        set ~pos 19
+        set _spf_sv_highscore_frag_0 999999
+
+        sp_sc_cvar_copy ~cmp _spf_sv_highscore_frag_$~pos
+        sp_sc_flow_while number val #_sp_sv_info_client_score > cvar ~cmp
+        {
+          set ~pos2 #~pos
+          add ~pos2 1
+
+          sp_sc_cvar_copy _spf_sv_highscore_name_$~pos2 _spf_sv_highscore_name_$~pos
+          sp_sc_cvar_copy _spf_sv_highscore_frag_$~pos2 _spf_sv_highscore_frag_$~pos
+          sp_sc_cvar_copy _hs$~pos2 _hs$~pos
+
+          add ~pos -1
+          sp_sc_cvar_copy ~cmp _spf_sv_highscore_frag_$~pos
+        }
+
+        // Now store the new highscore at the correct location
+        add ~pos 1
+
+        set _spf_sv_highscore_name_$~pos #_sp_sv_info_client_name
+        set _spf_sv_highscore_frag_$~pos #_sp_sv_info_client_score
+
+        // Score
+        sp_sc_cvar_sset _hs$~pos "   " #_sp_sv_info_client_score " "
+        sp_sc_cvar_substr _hs$~pos _hs$~pos -4 4
+
+        // Name
+        // Only allow 15 name characters (of about 32 max)
+        sp_sc_cvar_substr _sp_sv_info_client_name _sp_sv_info_client_name 0 15
+        sp_sc_cvar_append _hs$~pos #_sp_sv_info_client_name
+
+        // Spaces to get the correct length
+        sp_sc_cvar_no_color ~name _sp_sv_info_client_name
+        sp_sc_cvar_len ~len ~name
+        set ~space "               "
+        set ~substr 15
+        add ~substr -$~len
+        sp_sc_cvar_substr ~space ~space 0 #~substr
+        sp_sc_cvar_append _hs$~pos #~space
+      }
+    }
+    add ~slot 1
+  }
+
+  sp_sc_cvar_sset ~tmp "highscore/" #mapname ".cfg"
+  sp_sc_cvar_save #~tmp _hs* _spf_sv_highscore_frag_* _spf_sv_highscore_name_*
+
+  sp_sc_flow_if number val #_spf_sv_highscore_print_end > val 0
+  {
+    // Wait a bit and then print the highscore
+    sp_sc_timer #_spf_sv_highscore_print_end "sp_sc_func_exec spf_sv_highscore_print_broadcast"
+  }
+}
+
+
+//
+// Print highscore when a player enters
+//
+function spf_sv_highscore_on_client_begin( ~par_slot )
+{
+  sp_sc_flow_if number val #_spf_sv_highscore_print_start > val 0
+  {
+    // Wait a bit for the welcome message to disappear and then print the highscore
+    sset ~cmd ";sp_sc_func_exec spf_sv_highscore_print_client" #~par_slot
+    sp_sc_timer #_spf_sv_highscore_print_start #~cmd
+  }
+}
+
+
+//
+// Print highscore to one client (top 12)
+//
+function spf_sv_highscore_print_client( ~par_slot )
+{
+  sp_sv_print_sp_client #~par_slot 13 #_hs1 #_hs5 #_hs9 #_hs2 #_hs6 #_hs10 #_hs3 #_hs7 #_hs11 #_hs4 #_hs8 #_hs12
+}
+
+
+//
+// Print highscore to all clients (top 12)
+//
+function spf_sv_highscore_print_broadcast()
+{
+  sp_sv_print_sp_broadcast 13 #_hs1 #_hs5 #_hs9 #_hs2 #_hs6 #_hs10 #_hs3 #_hs7 #_hs11 #_hs4 #_hs8 #_hs12
+}
+
+
+//
+// Print highscore to one client (top 20)
+//
+function spf_sv_highscore_print_best( ~par_slot )
+{
+  sp_sv_print_sp_client #~par_slot 12 #mapname #_hs1 #_hs2 #_hs3 #_hs4 #_hs5 #_hs6 #_hs7 #_hs8 #_hs9 #_hs10 #_hs11 #_hs12 #_hs13 #_hs14 #_hs15 #_hs16 #_hs17 #_hs18 #_hs19 #_hs20
+}

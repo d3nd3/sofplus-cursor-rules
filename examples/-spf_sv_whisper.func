@@ -1,0 +1,229 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Send private messages to other players
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_whisper_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_whisper_on_map_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_whisper_on_client_begin"
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_whisper_on_map_begin()
+{
+  set _spf_sv_whisper_help 00000000000000000000000000000000
+}
+
+
+//
+// Client begin
+//
+function spf_sv_whisper_on_client_begin( ~par_slot )
+{
+  // Not whispered yet
+  set _spf_sv_whisper_time_$~par_slot 0
+  // Nobody muted yet
+  set _spf_sv_whisper_mute_$~par_slot 00000000000000000000000000000000
+}
+
+
+//
+// Whisper to player
+//
+function .whisper( ~par_slot, * )
+{
+  sp_sc_flow_if number val #~0 >= val 2
+  {
+    set ~slot_dst #~1
+
+    set ~slot #~slot_dst
+    add ~slot 0
+    sp_sc_flow_if text val #~slot_dst == val #~slot
+    {
+      sp_sc_flow_if number val #~slot_dst >= val 0
+      {
+        sp_sc_flow_if number val #~slot_dst < val #maxclients
+        {
+          zero _sp_sv_info_client_ip
+          sp_sv_info_client #~slot_dst
+          sp_sc_flow_if text val #_sp_sv_info_client_ip != val ""
+          {
+            // Check for spammers
+            sp_sc_info_time
+            sp_sc_flow_if number cvar _spf_sv_whisper_time_$~par_slot < val #_sp_sc_info_time_sec
+            {
+              // Only one message every 2 seconds
+              set _spf_sv_whisper_time_$~par_slot #_sp_sc_info_time_sec
+              add _spf_sv_whisper_time_$~par_slot 1
+
+              // Check if the receiver muted the sender
+              sp_sc_cvar_substr ~mute _spf_sv_whisper_mute_$~slot_dst #~par_slot 1
+              sp_sc_flow_if text val #~mute == val 0
+              {
+                // Help message to receiver
+                sp_sc_cvar_substr ~help _spf_sv_whisper_help #~slot_dst 1
+                sp_sc_flow_if text val #~help == val 0
+                {
+                  sp_sc_cvar_substr ~before _spf_sv_whisper_help 0 #~slot_dst
+                  set ~pos #~slot_dst
+                  add ~pos 1
+                  sp_sc_cvar_substr ~after _spf_sv_whisper_help #~pos 32
+                  sp_sc_cvar_sset _spf_sv_whisper_help #~before "1" #~after
+
+                  sp_sv_print_sp_client #~slot_dst 37 #~par_slot #~par_slot
+                }
+
+                // Prepare message
+                set ~text #~2
+                set ~count 3
+                sp_sc_flow_while number cvar ~count <= val #~0
+                {
+                  sp_sc_cvar_copy ~part ~$~count
+                  sp_sc_cvar_append ~text " " #~part
+                  add ~count 1
+                }
+                sp_sc_cvar_unescape ~text ~text
+                sp_sc_cvar_replace ~text ~text "%0a:" "%0d:" "%22:%97" "%ff:"
+                sp_sc_cvar_substr ~text ~text 0 150
+
+                // Message to the player
+                sp_sv_info_client #~par_slot
+                sp_sv_print_sp_client #~slot_dst 40 #~par_slot #_sp_sv_info_client_name #~text
+                // Message to the log
+                sp_sc_cvar_sset ~msg "Whisper [" #~par_slot "] to [" #~slot_dst "]: " #~text
+                echo #~msg
+              }
+              else
+              {
+                sp_sv_print_sp_client #~par_slot 33
+              }
+            }
+            else
+            {
+              sp_sv_print_sp_client #~par_slot 35
+            }
+          }
+          else
+          {
+            sp_sv_print_sp_client #~par_slot 34
+          }
+        }
+        else
+        {
+          sp_sv_print_sp_client #~par_slot 34
+        }
+      }
+      else
+      {
+        sp_sv_print_sp_client #~par_slot 34
+      }
+    }
+    else
+    {
+      sp_sv_print_sp_client #~par_slot 34
+    }
+  }
+  else
+  {
+    sp_sv_print_sp_client #~par_slot 36
+  }
+}
+
+
+//
+// Mute player
+//
+function .mute( ~par_slot, ~par_slot_src )
+{
+  sp_sc_flow_if text val #~par_slot_src == val "*"
+  {
+    set _spf_sv_whisper_mute_$~par_slot 11111111111111111111111111111111
+    sp_sv_print_sp_client #~par_slot 38
+  }
+  else
+  {
+    set ~slot #~par_slot_src
+    add ~slot 0
+    sp_sc_flow_if text val #~par_slot_src == val #~slot
+    {
+      sp_sc_flow_if number val #~par_slot_src >= val 0
+      {
+        sp_sc_flow_if number val #~par_slot_src < val #maxclients
+        {
+          sp_sc_cvar_substr ~before _spf_sv_whisper_mute_$~par_slot 0 #~par_slot_src
+          set ~pos #~par_slot_src
+          add ~pos 1
+          sp_sc_cvar_substr ~after _spf_sv_whisper_mute_$~par_slot #~pos 32
+          sp_sc_cvar_sset _spf_sv_whisper_mute_$~par_slot #~before "1" #~after
+          sp_sv_print_sp_client #~par_slot 39 #~par_slot_src
+        }
+        else
+        {
+          sp_sv_print_sp_client #~par_slot 34
+        }
+      }
+      else
+      {
+        sp_sv_print_sp_client #~par_slot 34
+      }
+    }
+    else
+    {
+      sp_sv_print_sp_client #~par_slot 34
+    }
+  }
+}
+
+
+//
+// Unmute player
+//
+function .unmute( ~par_slot, ~par_slot_src )
+{
+  sp_sc_flow_if text val #~par_slot_src == val "*"
+  {
+    set _spf_sv_whisper_mute_$~par_slot 00000000000000000000000000000000
+    sp_sv_print_sp_client #~par_slot 41
+  }
+  else
+  {
+    set ~slot #~par_slot_src
+    add ~slot 0
+    sp_sc_flow_if text val #~par_slot_src == val #~slot
+    {
+      sp_sc_flow_if number val #~par_slot_src >= val 0
+      {
+        sp_sc_flow_if number val #~par_slot_src < val #maxclients
+        {
+          sp_sc_cvar_substr ~before _spf_sv_whisper_mute_$~par_slot 0 #~par_slot_src
+          set ~pos #~par_slot_src
+          add ~pos 1
+          sp_sc_cvar_substr ~after _spf_sv_whisper_mute_$~par_slot #~pos 32
+          sp_sc_cvar_sset _spf_sv_whisper_mute_$~par_slot #~before "0" #~after
+          sp_sv_print_sp_client #~par_slot 42 #~par_slot_src
+        }
+        else
+        {
+          sp_sv_print_sp_client #~par_slot 34
+        }
+      }
+      else
+      {
+        sp_sv_print_sp_client #~par_slot 34
+      }
+    }
+    else
+    {
+      sp_sv_print_sp_client #~par_slot 34
+    }
+  }
+}

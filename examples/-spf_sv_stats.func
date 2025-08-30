@@ -1,0 +1,121 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// .stats command
+// When enabled, players can use these commands to get frag / die statistics
+// for each weapon
+//   .stats
+//   .stats <slot>
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_stats_init()
+{
+}
+
+
+//
+// Print stats
+//
+function .stats( ~par_slot, ~par_slot_req )
+{
+  sp_sc_flow_if text val #~par_slot_req == val ""
+  {
+    set ~par_slot_req #~par_slot
+  }
+
+  set ~slot #~par_slot_req
+  add ~slot 0
+  sp_sc_flow_if text val #~par_slot_req == val #~slot
+  {
+    sp_sc_flow_if number val #~par_slot_req >= val 0
+    {
+      sp_sc_flow_if number val #~par_slot_req < val #maxclients
+      {
+        zero _sp_sv_info_client_ip
+        sp_sv_info_client #~par_slot_req
+        sp_sc_flow_if number val #_sp_sv_info_client_ip != val ""
+        {
+          sp_sc_cvar_sset ~msg "Stats for " #_sp_sv_info_client_name
+          sp_sv_print_client #~par_slot #~msg
+          sp_sv_print_client #~par_slot "WEAPON        FRAG DIE"
+
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Knife/1/2"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Pistol/3"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Magnum/4"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Shotgun/9"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Sniperrifle/7"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Machinepistol/5"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Assaultrifle/6"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Machinegun/10/11"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Slugthrower/8/37"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Rocketlauncher/12/13"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Flamethrower/15/16"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "MPG/14"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Grenade/36"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "C4/17"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Claymore/18"
+          sp_sc_func_exec spf_sv_stats_details #~par_slot #~par_slot_req "Other/0/19/20/21/22/23/24/25/26/27/28/29/30/31/32/33/34/35/38"
+        }
+      }
+    }
+  }
+}
+
+
+function spf_sv_stats_details( ~par_slot, ~par_slot_req, ~par_text )
+{
+  sp_sc_cvar_split ~split "/" ~par_text
+
+  // Should at least be 2 parts
+  sp_sc_flow_if number val #~split_0 >= val 2
+  {
+    set ~die 0
+    set ~frag 0
+
+    sp_sc_flow_while number cvar ~split_0 > val 1
+    {
+      sp_sc_cvar_copy ~weapon ~split_$~split_0
+
+      sp_sv_info_client_mod #~par_slot_req #~weapon
+
+      add ~die #_sp_sv_info_client_mod_die
+      add ~frag #_sp_sv_info_client_mod_frag
+
+      add ~split_0 -1
+    }
+
+    set ~val #~die
+    add ~val #~frag
+
+    sp_sc_flow_if number val #~val > val 0
+    {
+      sp_sc_cvar_len ~len ~split_1
+      sp_sc_flow_while number cvar ~len < val 14
+      {
+        sp_sc_cvar_sset ~split_1 #~split_1 " "
+        add ~len 1
+      }
+
+      sp_sc_cvar_len ~len ~frag
+      sp_sc_flow_while number cvar ~len < val 4
+      {
+        sp_sc_cvar_sset ~frag " " #~frag
+        add ~len 1
+      }
+
+      sp_sc_cvar_len ~len ~die
+      sp_sc_flow_while number cvar ~len < val 4
+      {
+        sp_sc_cvar_sset ~die " " #~die
+        add ~len 1
+      }
+
+      sp_sc_cvar_sset ~msg "" #~split_1 #~frag #~die
+      sp_sv_print_client #~par_slot #~msg
+    }
+  }
+}

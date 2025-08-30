@@ -1,0 +1,1473 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Allow players to execute some rcon commands
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_rcon_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_begin "spf_sv_rcon_on_client_begin"
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_client_disconnect "spf_sv_rcon_on_client_disconnect"
+
+  set _spf_sv_rcon_g_movescale 0
+}
+
+
+//
+// Configuration
+//
+function spf_sv_rcon_config( ~slot, ~username, ~password )
+{
+  // Read admin users from the file that gets written by '.rcon admin_add', '.rcon admin_grant' and '.rcon admin_revoke'
+  sp_sc_exec_file sofplus/data/spf_sv_rcon.cfg
+
+  // These users can not be manipulated with the '.rcon admin_*' commands:
+  sp_sc_exec_file sofplus/addons/spf_sv_rcon.cfg
+
+  sp_sc_cvar_copy _par_1 ~user_$~username
+  sp_sc_func_exec spf_sv_rcon_login #~slot #~username #~password _par_1
+}
+
+
+//
+// Things to do when the player enters
+//
+function spf_sv_rcon_on_client_begin( ~par_slot )
+{
+  // This isn't really needed, because the player IP is checked when executing .rcon commands
+  sp_sc_flow_if text cvar _spf_sv_rcon_ip_$~par_slot != val ""
+  {
+    zero _sp_sv_info_client_ip
+    sp_sv_info_client #~par_slot
+    sp_sc_flow_if text cvar _sp_sv_info_client_ip != cvar _spf_sv_rcon_ip_$~par_slot
+    {
+      zero _spf_sv_rcon_username_$~par_slot
+      zero _spf_sv_rcon_ip_$~par_slot
+      zero _spf_sv_rcon_commands_$~par_slot
+    }
+  }
+}
+
+
+//
+// Things to do when the player leaves
+//
+function spf_sv_rcon_on_client_disconnect( ~par_slot, * )
+{
+  // When a player disconnects, log him out
+  sp_sc_flow_if text cvar _spf_sv_rcon_ip_$~par_slot != val ""
+  {
+    zero _spf_sv_rcon_username_$~par_slot
+    zero _spf_sv_rcon_ip_$~par_slot
+    zero _spf_sv_rcon_commands_$~par_slot
+  }
+}
+
+//
+// Rcon command
+//
+function .rcon( ~par_slot, ~par_command, * )
+{
+  set ~command_help "dummy;0;.rcon help"
+  set ~command_login "dummy;2;.rcon login <username> <password>"
+  set ~command_logout "dummy;0;.rcon logout"
+  set ~command_admin_add "spf_sv_rcon_admin_add;2;.rcon admin_add <slot>[/CIDR] <username>"
+  set ~command_admin_grant "spf_sv_rcon_admin_grant;2;.rcon admin_grant <username> <command[,command...]>"
+  set ~command_admin_list "spf_sv_rcon_admin_list;1;.rcon admin_list <username|*>"
+  set ~command_admin_password "spf_sv_rcon_admin_password;1;.rcon admin_password <new password>"
+  set ~command_admin_revoke "spf_sv_rcon_admin_revoke;2;.rcon admin_revoke <username> <command[,command...]|*>"
+  set ~command_ammo "spf_sv_rcon_ammo;1;.rcon ammo limited|unlimited"
+  set ~command_blue "spf_sv_rcon_blue;1;.rcon blue <slot|*>"
+  set ~command_ctf_loops "spf_sv_rcon_ctf_loops;1;.rcon ctf_loops <value>"
+  set ~command_control_limit "spf_sv_rcon_control_limit;1;.rcon control_limit <value>"
+  set ~command_fraglimit "spf_sv_rcon_fraglimit;1;.rcon fraglimit <value>"
+  set ~command_gametype "spf_sv_rcon_gametype;1;.rcon gametype arsenal|assassin|control|ctb|ctf|dm|realistic|redblue_ctb|team_dm|team_realistic"
+  set ~command_hostname "spf_sv_rcon_hostname;+1;.rcon hostname <hostname>"
+  set ~command_ip_ban "spf_sv_rcon_ip_ban;2;.rcon ip_ban <slot>[/CIDR] <player info>"
+  set ~command_ip_info "spf_sv_rcon_ip_info;2;.rcon ip_info <slot>[/CIDR] <player info>"
+  set ~command_ip_kick "spf_sv_rcon_ip_kick;2;.rcon ip_kick <slot>[/CIDR] <player info>"
+  set ~command_ip_mute "spf_sv_rcon_ip_mute;2;.rcon ip_mute <slot>[/CIDR] <player info>"
+  set ~command_ip_remove "spf_sv_rcon_ip_remove;2;.rcon ip_remove <slot>[/CIDR] <player info>"
+  set ~command_kick "spf_sv_rcon_kick;1;.rcon kick <slot>"
+  set ~command_map "spf_sv_rcon_map;1;.rcon map <map>"
+  set ~command_maplist "spf_sv_rcon_maplist;1;.rcon maplist <map[,map...]>"
+  set ~command_maplistfile "spf_sv_rcon_maplistfile;1;.rcon maplistfile <maplistfile>"
+  set ~command_mute "spf_sv_rcon_mute;1;.rcon mute <slot|*>"
+  set ~command_password "spf_sv_rcon_password;1;.rcon password <value>"
+  set ~command_pause "spf_sv_rcon_pause;0;.rcon pause"
+  set ~command_play "spf_sv_rcon_play;1;.rcon play <slot|*>"
+  set ~command_red "spf_sv_rcon_red;1;.rcon red <slot|*>"
+  set ~command_restart "spf_sv_rcon_restart;0;.rcon restart"
+  set ~command_say "spf_sv_rcon_say;+1;.rcon say <message>"
+  set ~command_spec "spf_sv_rcon_spec;1;.rcon spec <slot|*>"
+  set ~command_spectator_password "spf_sv_rcon_spectator_password;1;.rcon spectator_password <value>"
+  set ~command_status "spf_sv_rcon_status;0;.rcon status"
+  set ~command_swap "spf_sv_rcon_swap;1;.rcon swap <slot|*>"
+  set ~command_timelimit "spf_sv_rcon_timelimit;1;.rcon timelimit <value>"
+  set ~command_unmute "spf_sv_rcon_unmute;1;.rcon unmute <slot|*>"
+  set ~command_unpause "spf_sv_rcon_unpause;0;.rcon unpause"
+  set ~command_weapons "spf_sv_rcon_weapons;1;.rcon weapons all|bullet"
+  set ~command_jail "spf_sv_rcon_jail;1;.rcon jail <slot>"
+
+  zero _sp_sv_info_client_ip
+  sp_sv_info_client #~par_slot
+
+  // Message for server log
+  sp_sc_cvar_sset ~msg "Client rcon [" #~par_slot "] " #_sp_sv_info_client_ip
+  echo #~msg
+
+  set ~msg ""
+
+  sp_sc_flow_if text cvar ~par_command == val ""
+  {
+    set ~par_command "help"
+  }
+
+  sp_sc_cvar_sset ~cvar_name ~command_ #~par_command
+  sp_sc_flow_if text cvar #~cvar_name != val ""
+  {
+    sp_sc_cvar_split ~cmdsplit ";" #~cvar_name
+
+    // Combine last arguments into one?
+    sp_sc_cvar_substr ~combine ~cmdsplit_2 0 1
+    sp_sc_flow_if text cvar ~combine == val "+"
+    {
+      add ~cmdsplit_2 0
+      sp_sc_flow_if number cvar ~0 > cvar ~cmdsplit_2
+      {
+        set ~count #~cmdsplit_2
+        add ~count 1
+        sp_sc_flow_while number cvar ~count <= val #~0
+        {
+          sp_sc_cvar_append ~$~cmdsplit_2 " "
+          sp_sc_cvar_copy ~$~cmdsplit_2 ~$~cmdsplit_2 ~$~count
+          add ~count 1
+        }
+        set ~0 #~cmdsplit_2
+      }
+    }
+
+    sp_sc_flow_if number cvar ~0 == cvar ~cmdsplit_2
+    {
+      sp_sc_flow_if text cvar ~par_command == val "help"
+      {
+        sp_sc_cvar_split ~help ";" ~command_help
+        sp_sv_print_client #~par_slot #~help_3
+        sp_sc_cvar_split ~help ";" ~command_login
+        sp_sv_print_client #~par_slot #~help_3
+        sp_sc_cvar_split ~help ";" ~command_logout
+        sp_sv_print_client #~par_slot #~help_3
+        sp_sc_flow_if text cvar _sp_sv_info_client_ip == cvar _spf_sv_rcon_ip_$~par_slot
+        {
+          sp_sc_cvar_split ~split "," _spf_sv_rcon_commands_$~par_slot
+          set ~count 1
+          sp_sc_flow_while number cvar ~count <= val #~split_0
+          {
+            sp_sc_cvar_copy ~cvar_name ~split_$~count
+            sp_sc_cvar_sset ~cvar_name ~command_ #~cvar_name
+            sp_sc_cvar_split ~help ";" #~cvar_name
+            sp_sc_flow_if number cvar ~help_0 == val 3
+            {
+              sp_sv_print_client #~par_slot #~help_3
+            }
+            add ~count 1
+          }
+        }
+      }
+      else
+      {
+        sp_sc_flow_if text cvar ~par_command == val "login"
+        {
+          sp_sc_cvar_replace ~1 ~1 "%00-%2f:" "%3a-%40:" "%5b-%60:" "%7b-%ff:"
+
+          sp_sc_func_exec spf_sv_rcon_config #~par_slot #~1 #~2
+        }
+        else
+        {
+          sp_sc_flow_if text cvar ~par_command == val "logout"
+          {
+            sp_sc_func_exec spf_sv_rcon_logout #~par_slot
+          }
+          else
+          {
+            sp_sc_flow_if text cvar _sp_sv_info_client_ip == cvar _spf_sv_rcon_ip_$~par_slot
+            {
+              sp_sc_cvar_split ~split "," _spf_sv_rcon_commands_$~par_slot
+              set ~found 0
+              set ~count 1
+              sp_sc_flow_while number cvar ~count <= val #~split_0
+              {
+                sp_sc_flow_if text cvar ~split_$~count == val #~par_command
+                {
+                  set ~found 1
+                  set ~count 99999999
+                }
+                add ~count 1
+              }
+
+              sp_sc_flow_if number val #~found == val 1
+              {
+                sp_sc_flow_if number cvar ~cmdsplit_2 == val 0
+                {
+                  // Message to the log
+                  echo "  Executing:" #~par_command
+                  // Execute command
+                  sp_sc_func_exec #~cmdsplit_1 #~par_slot
+                }
+                else
+                {
+                  sp_sc_flow_if number cvar ~cmdsplit_2 == val 1
+                  {
+                    // Message to the log
+                    echo "  Executing:" #~par_command #~1
+                    // Execute command
+                    sp_sc_func_exec #~cmdsplit_1 #~par_slot #~1
+                  }
+                  else
+                  {
+                    sp_sc_flow_if number cvar ~cmdsplit_2 == val 2
+                    {
+                      // Message to the log
+                      echo "  Executing:" #~par_command #~1 #~2
+                      // Execute command
+                      sp_sc_func_exec #~cmdsplit_1 #~par_slot #~1 #~2
+                    }
+                    // Expand if commands with more arguments are added
+                  }
+                }
+              }
+              else
+              {
+                sset ~msg "ERROR: Command" #~par_command "not allowed"
+              }
+            }
+            else
+            {
+              set ~msg "ERROR: You must login first: .rcon login <username> <password>"
+            }
+          }
+        }
+      }
+    }
+    else
+    {
+      sset ~msg "ERROR: Usage:" #~cmdsplit_3
+    }
+  }
+  else
+  {
+    sset ~msg "ERROR: Command" #~par_command "not supported"
+  }
+
+  sp_sc_flow_if text cvar ~msg != val ""
+  {
+    sp_sv_print_client #~par_slot #~msg
+    echo " " #~msg
+  }
+}
+
+
+function spf_sv_rcon_login( ~par_slot, ~par_username, ~par_password, ~par_userinfo_cvarname )
+{
+  sp_sc_cvar_copy ~par_userinfo #~par_userinfo_cvarname
+  zero #~par_userinfo_cvarname
+  zero _spf_sv_rcon_username_$~par_slot
+  zero _spf_sv_rcon_ip_$~par_slot
+  zero _spf_sv_rcon_commands_$~par_slot
+
+  sp_sc_flow_if text cvar ~par_userinfo != val ""
+  {
+    sp_sc_cvar_split ~split ";" ~par_userinfo
+    sp_sc_flow_if number cvar ~split_0 == val 3
+    {
+      sp_sc_flow_if text cvar ~par_password != val ""
+      {
+        sp_sc_flow_if text cvar ~split_1 == cvar ~par_password
+        {
+          sp_sc_func_exec spf_sc_ip_match_cidr_list #_sp_sv_info_client_ip #~split_2 _ret_1
+          sp_sc_flow_if number cvar _ret_1 == val 1
+          {
+            set _spf_sv_rcon_username_$~par_slot #~par_username
+            set _spf_sv_rcon_ip_$~par_slot #_sp_sv_info_client_ip
+            sp_sc_cvar_copy _spf_sv_rcon_commands_$~par_slot ~split_3
+
+            sp_sc_cvar_sset ~msg ".rcon login [" #~par_slot "] "  #~par_username
+            sp_sv_print_broadcast #~msg
+
+            sset ~msg "OK: Login" #~par_username
+          }
+          else
+          {
+            // Don't allow any commands, but allow another admin to use .rcon admin_add to change the IP
+            set _spf_sv_rcon_username_$~par_slot #~par_username
+            set _spf_sv_rcon_ip_$~par_slot "INVALID"
+            set _spf_sv_rcon_commands_$~par_slot ""
+
+            set ~msg "ERROR: Login failed: IP not allowed"
+          }
+        }
+        else
+        {
+          set ~msg "ERROR: Login failed: Password mismatch"
+        }
+      }
+      else
+      {
+        set ~msg "ERROR: Login failed: Empty password not allowed"
+      }
+    }
+    else
+    {
+      set ~msg "ERROR: Login failed: Server misconfiguration"
+    }
+  }
+  else
+  {
+    set ~msg "ERROR: Login failed: User does not exist"
+  }
+
+  sp_sv_print_client #~par_slot #~msg
+  echo " " #~msg
+}
+
+
+function spf_sv_rcon_logout( ~par_slot )
+{
+  set _spf_sv_rcon_username_$~par_slot ""
+  set _spf_sv_rcon_ip_$~par_slot ""
+  set _spf_sv_rcon_commands_$~par_slot ""
+
+  set ~msg "OK: Logout"
+  sp_sv_print_client #~par_slot #~msg
+  echo " " #~msg
+}
+
+
+// .rcon admin_add <slot>[/CIDR] <username>
+function spf_sv_rcon_admin_add( ~par_slot, ~par_target_slot, ~par_username, * )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_cidr #~par_target_slot _ret_1 _ret_2
+  set ~slot #_ret_1
+  set ~cidr #_ret_2
+  sp_sc_flow_if text cvar ~slot != val ""
+  {
+    sp_sc_cvar_replace ~username ~par_username "%00-%2f:" "%3a-%60:" "%7b-%ff:"
+    sp_sc_flow_if text cvar ~username == cvar ~par_username
+    {
+      // Check if the player already logged in as someone else
+      set ~inuse 0
+      sp_sc_flow_if text cvar _spf_sv_rcon_username_$~slot != val ""
+      {
+        sp_sc_flow_if text cvar _spf_sv_rcon_username_$~slot != cvar ~username
+        {
+          set ~inuse 1
+        }
+      }
+
+      sp_sc_flow_if number cvar ~inuse == val 0
+      {
+        // Get stored cvars
+        sp_sc_exec_file sofplus/data/spf_sv_rcon.cfg
+
+        sp_sc_flow_if text cvar ~user_$~username == val ""
+        {
+          // Add cvar
+          // The _sp_sv_info_client_ip cvar has been set correctly in the spf_sv_rcon_helper_get_slot_cidr function
+          sp_sc_func_exec spf_sc_ip_to_cidr #_sp_sv_info_client_ip #~cidr _ret_1
+          sp_sc_cvar_sset ~user_$~username ";" #_ret_1 ";"
+
+          // Save cvars
+          sp_sc_cvar_save spf_sv_rcon.cfg ~user_*
+
+          // Allow player to set his password
+          set _spf_sv_rcon_username_$~slot #~username
+          set _spf_sv_rcon_ip_$~slot #_sp_sv_info_client_ip
+          set _spf_sv_rcon_commands_$~slot "admin_password"
+          sp_sc_flow_if text cvar ~1 == val ""
+          {
+            sp_sc_cvar_sset ~msg "A new .rcon account has been created for you: " #~username
+            sp_sv_print_client #~slot #~msg
+            sp_sc_cvar_sset ~msg "You must set the password of your .rcon admin account by typing: .rcon admin_password <new password>"
+            sp_sv_print_client #~slot #~msg
+          }
+
+          sp_sv_print_client #~par_slot "OK: Admin added"
+        }
+        else
+        {
+          // User already exists, maybe no password has been set or the allowed IP address must be updated
+          sp_sc_cvar_split ~split ";" ~user_$~username
+          sp_sc_flow_if number cvar ~split_0 == val 3
+          {
+            sp_sc_flow_if text cvar ~split_1 == val ""
+            {
+              // No password
+
+              // The _sp_sv_info_client_ip cvar has been set correctly in the spf_sv_rcon_helper_get_slot_cidr function
+              sp_sc_func_exec spf_sc_ip_to_cidr #_sp_sv_info_client_ip #~cidr _ret_1
+              set ~semicolon ";"
+              sp_sc_cvar_copy ~user_$~username ~split_1 ~semicolon _ret_1 ~semicolon ~split_3
+
+              // Save cvars
+              sp_sc_cvar_save spf_sv_rcon.cfg ~user_*
+
+              // Allow player to set his password
+              set _spf_sv_rcon_username_$~slot #~username
+              set _spf_sv_rcon_ip_$~slot #_sp_sv_info_client_ip
+              set _spf_sv_rcon_commands_$~slot "admin_password"
+              sp_sc_cvar_sset ~msg "A new .rcon account has been created for you: " #~username
+              sp_sv_print_client #~slot #~msg
+              sp_sc_cvar_sset ~msg "You must set the password of your .rcon admin account by typing: .rcon admin_password <new password>"
+              sp_sv_print_client #~slot #~msg
+
+              sp_sv_print_client #~par_slot "OK: Admin added again and IP updated"
+            }
+            else
+            {
+              sp_sc_flow_if text cvar _spf_sv_rcon_ip_$~slot == val "INVALID"
+              {
+                // Update IP address
+
+                // The _sp_sv_info_client_ip cvar has been set correctly in the spf_sv_rcon_helper_get_slot_cidr function
+                sp_sc_func_exec spf_sc_ip_to_cidr #_sp_sv_info_client_ip #~cidr _ret_1
+                set ~semicolon ";"
+                sp_sc_cvar_copy ~user_$~username ~split_1 ~semicolon _ret_1 ~semicolon ~split_3
+
+                // Save cvars
+                sp_sc_cvar_save spf_sv_rcon.cfg ~user_*
+
+                // Notify player
+                sp_sc_cvar_sset ~msg "Your .rcon admin account has been updated. Please login again"
+                sp_sv_print_client #~slot #~msg
+
+                sp_sv_print_client #~par_slot "OK: Admin IP updated"
+              }
+              else
+              {
+                sp_sv_print_client #~par_slot "ERROR: Username already exists"
+              }
+            }
+          }
+          else
+          {
+            sp_sv_print_client #~par_slot "ERROR: Server misconfiguration"
+          }
+        }
+      }
+      else
+      {
+        sp_sc_cvar_copy ~username _spf_sv_rcon_username_$~slot
+        sp_sc_cvar_sset ~msg "ERROR: Player already logged in as " #~username
+        sp_sv_print_client #~par_slot #~msg
+      }
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: Username may only contain a..z and 0..9"
+    }
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+// .rcon admin_grant <username> <command[,command...]>
+function spf_sv_rcon_admin_grant( ~par_slot, ~par_username, ~par_command )
+{
+  // Get stored cvars
+  sp_sc_exec_file sofplus/data/spf_sv_rcon.cfg
+
+  sp_sc_cvar_replace ~par_username ~par_username "%00-%2f:" "%3a-%60:" "%7b-%ff:"
+  sp_sc_flow_if text cvar ~user_$~par_username != val ""
+  {
+    sp_sc_cvar_split ~split ";" ~user_$~par_username
+    sp_sc_flow_if number cvar ~split_0 == val 3
+    {
+      sp_sc_flow_if text cvar ~par_command != val ""
+      {
+        sp_sc_cvar_copy _ret_1 ~split_3
+
+        // Prepare list of allowed commands
+        sp_sc_flow_if text cvar _spf_sv_rcon_commands_$~par_slot != val ""
+        {
+          sp_sc_cvar_split ~allowed "," _spf_sv_rcon_commands_$~par_slot
+        }
+        else
+        {
+          set ~allowed_0 0
+        }
+
+        // Process new commands
+        sp_sc_cvar_split ~new "," ~par_command
+        set ~new_loop 1
+        sp_sc_flow_while number cvar ~new_loop <= val #~new_0
+        {
+          sp_sc_cvar_copy ~command ~new_$~new_loop
+
+          // Check if new command is allowed
+          set ~found 0
+          set ~allowed_loop 1
+          sp_sc_flow_while number cvar ~allowed_loop <= val #~allowed_0
+          {
+            sp_sc_flow_if text cvar ~command == cvar ~allowed_$~allowed_loop
+            {
+              set ~found 1
+              set ~allowed_loop 99999999
+            }
+            add ~allowed_loop 1
+          }
+
+          sp_sc_flow_if number cvar ~found == val 1
+          {
+            sp_sc_func_exec spf_sc_list_add _ret_1 #~command ","
+            // Do not print all added commands, because it may overflow the client
+            //sp_sc_cvar_sset ~msg "Adding / updating command: " #~command
+            //sp_sv_print_client #~par_slot #~msg
+          }
+          else
+          {
+            sp_sc_cvar_sset ~msg "Ignoring command: " #~command
+            sp_sv_print_client #~par_slot #~msg
+          }
+
+          add ~new_loop 1
+        }
+
+        sp_sc_cvar_copy ~split_3 _ret_1
+
+        set ~semicolon ";"
+        sp_sc_cvar_copy ~user_$~par_username ~split_1 ~semicolon ~split_2 ~semicolon ~split_3
+
+        // Save cvars
+        sp_sc_cvar_save spf_sv_rcon.cfg ~user_*
+      }
+      sp_sv_print_client #~par_slot "OK"
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: Server misconfiguration"
+    }
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: User does not exist"
+  }
+}
+
+
+// .rcon admin_list <username|*>
+function spf_sv_rcon_admin_list( ~par_slot, ~par_username )
+{
+  // Get stored cvars
+  sp_sc_exec_file sofplus/data/spf_sv_rcon.cfg
+
+  sp_sc_flow_if text cvar ~par_username == val "*"
+  {
+    sp_sv_print_client #~par_slot "Users:"
+
+    sp_sc_cvar_find ~users ~user_*
+    set ~count 1
+    sp_sc_flow_while number cvar ~count <= val #~users_0
+    {
+      sp_sc_cvar_copy ~user ~users_$~count
+      sp_sc_cvar_substr ~username ~user 6 9999
+      sp_sc_cvar_sset ~msg "  " #~username
+      sp_sv_print_client #~par_slot #~msg
+
+      add ~count 1
+    }
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sc_cvar_replace ~par_username ~par_username "%00-%2f:" "%3a-%60:" "%7b-%ff:"
+    sp_sc_flow_if text cvar ~user_$~par_username != val ""
+    {
+      sp_sc_cvar_split ~split ";" ~user_$~par_username
+      sp_sc_flow_if number cvar ~split_0 == val 3
+      {
+        sp_sc_cvar_sset ~msg "User " #~par_username ":"
+        sp_sv_print_client #~par_slot #~msg
+
+        sp_sc_flow_if text cvar ~split_3 != val ""
+        {
+          sp_sc_cvar_split ~command "," ~split_3
+          set ~count 1
+          sp_sc_flow_while number cvar ~count <= val #~command_0
+          {
+            sp_sc_cvar_copy ~command ~command_$~count
+            sp_sc_cvar_sset ~msg "  " #~command
+            sp_sv_print_client #~par_slot #~msg
+            add ~count 1
+          }
+        }
+        else
+        {
+          sp_sv_print_client #~par_slot "  -"
+        }
+        sp_sv_print_client #~par_slot "OK"
+      }
+      else
+      {
+        sp_sv_print_client #~par_slot "ERROR: Server misconfiguration"
+      }
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: User does not exist"
+    }
+  }
+}
+
+
+// .rcon admin_password <new password>
+function spf_sv_rcon_admin_password( ~par_slot, ~par_password )
+{
+  // Get stored cvars
+  sp_sc_exec_file sofplus/data/spf_sv_rcon.cfg
+
+  sp_sc_cvar_copy ~par_username _spf_sv_rcon_username_$~par_slot
+  sp_sc_flow_if text cvar ~user_$~par_username != val ""
+  {
+    sp_sc_cvar_split ~split ";" ~user_$~par_username
+    sp_sc_flow_if number cvar ~split_0 == val 3
+    {
+      sp_sc_cvar_replace ~password ~par_password "%10:" "%22:"
+      sp_sc_flow_if text cvar ~password == cvar ~par_password
+      {
+        sp_sc_cvar_len ~len ~par_password
+        sp_sc_flow_if number cvar ~len >= val 6
+        {
+          sp_sc_flow_if number cvar ~len <= val 32
+          {
+            set ~semicolon ";"
+            sp_sc_cvar_copy ~user_$~par_username ~par_password ~semicolon ~split_2 ~semicolon ~split_3
+
+            // Save cvars
+            sp_sc_cvar_save spf_sv_rcon.cfg ~user_*
+
+            sp_sv_print_client #~par_slot "OK"
+          }
+          else
+          {
+            sp_sv_print_client #~par_slot "ERROR: Password must be 6 .. 32 characters long"
+          }
+        }
+        else
+        {
+          sp_sv_print_client #~par_slot "ERROR: Password must be 6 .. 32 characters long"
+        }
+      }
+      else
+      {
+        sp_sv_print_client #~par_slot "ERROR: Password contains invalid characters"
+      }
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: Server misconfiguration"
+    }
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: User does not exist"
+  }
+}
+
+
+// .rcon admin_revoke <username> <command[,command...]|*>
+function spf_sv_rcon_admin_revoke( ~par_slot, ~par_username, ~par_command )
+{
+  // Get stored cvars
+  sp_sc_exec_file sofplus/data/spf_sv_rcon.cfg
+
+  sp_sc_cvar_replace ~par_username ~par_username "%00-%2f:" "%3a-%60:" "%7b-%ff:"
+  sp_sc_flow_if text cvar ~user_$~par_username != val ""
+  {
+    sp_sc_cvar_split ~split ";" ~user_$~par_username
+    sp_sc_flow_if number cvar ~split_0 == val 3
+    {
+      sp_sc_flow_if text cvar ~split_3 != val ""
+      {
+        sp_sc_flow_if text cvar ~par_command == val "*"
+        {
+          zero ~split_3
+        }
+        else
+        {
+          sp_sc_cvar_split ~command "," ~split_3
+          set ~count 1
+          zero ~split_3
+          sp_sc_flow_while number cvar ~count <= val #~command_0
+          {
+            sp_sc_flow_if text cvar ~command_$~count != val #~par_command
+            {
+              sp_sc_cvar_copy ~command ~command_$~count
+              sp_sc_cvar_append ~split_3 "," #~command
+            }
+            add ~count 1
+          }
+          sp_sc_cvar_substr ~split_3 ~split_3 1 9999
+        }
+
+        set ~semicolon ";"
+        sp_sc_cvar_copy ~user_$~par_username ~split_1 ~semicolon ~split_2 ~semicolon ~split_3
+
+        // Save cvars
+        sp_sc_cvar_save spf_sv_rcon.cfg ~user_*
+      }
+      sp_sv_print_client #~par_slot "OK"
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: Server misconfiguration"
+    }
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: User does not exist"
+  }
+}
+
+
+// Using vote code
+function spf_sv_rcon_ammo( ~par_slot, ~par_ammo )
+{
+  sp_sc_flow_if text cvar ~par_ammo == val "limited"
+  {
+    sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_ammo_limited"
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sc_flow_if text cvar ~par_ammo == val "unlimited"
+    {
+      sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_ammo_unlimited"
+      sp_sv_print_client #~par_slot "OK"
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: Invalid argument"
+    }
+  }
+}
+
+
+function spf_sv_rcon_blue( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_client_blue #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_ctf_loops( ~par_slot, ~par_ctf_loops )
+{
+  add ~par_ctf_loops 0
+  set ctf_loops #~par_ctf_loops
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_control_limit( ~par_slot, ~par_control_limit )
+{
+  add ~par_control_limit 0
+  set control_limit #~par_control_limit
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_fraglimit( ~par_slot, ~par_fraglimit )
+{
+  add ~par_fraglimit 0
+  set fraglimit #~par_fraglimit
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+// Using vote code
+function spf_sv_rcon_gametype( ~par_slot, ~par_gametype )
+{
+  sp_sc_flow_if text cvar ~par_gametype == val "arsenal"
+  {
+    sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_arsenal"
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sc_flow_if text cvar ~par_gametype == val "assassin"
+    {
+      sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_assassin"
+      sp_sv_print_client #~par_slot "OK"
+    }
+    else
+    {
+      sp_sc_flow_if text cvar ~par_gametype == val "control"
+      {
+        sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_control"
+        sp_sv_print_client #~par_slot "OK"
+      }
+      else
+      {
+        sp_sc_flow_if text cvar ~par_gametype == val "ctb"
+        {
+          sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_ctb"
+          sp_sv_print_client #~par_slot "OK"
+        }
+        else
+        {
+          sp_sc_flow_if text cvar ~par_gametype == val "ctf"
+          {
+            sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_ctf"
+            sp_sv_print_client #~par_slot "OK"
+          }
+          else
+          {
+            sp_sc_flow_if text cvar ~par_gametype == val "dm"
+            {
+              sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_dm"
+              sp_sv_print_client #~par_slot "OK"
+            }
+            else
+            {
+              sp_sc_flow_if text cvar ~par_gametype == val "realistic"
+              {
+                sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_realistic"
+                sp_sv_print_client #~par_slot "OK"
+              }
+              else
+              {
+                sp_sc_flow_if text cvar ~par_gametype == val "redblue_ctb"
+                {
+                  sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_redblue_ctb"
+                  sp_sv_print_client #~par_slot "OK"
+                }
+                else
+                {
+                  sp_sc_flow_if text cvar ~par_gametype == val "team_dm"
+                  {
+                    sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_team_dm"
+                    sp_sv_print_client #~par_slot "OK"
+                  }
+                  else
+                  {
+                    sp_sc_flow_if text cvar ~par_gametype == val "team_realistic"
+                    {
+                      sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_gametype_team_realistic"
+                      sp_sv_print_client #~par_slot "OK"
+                    }
+                    else
+                    {
+                      sp_sv_print_client #~par_slot "ERROR: Invalid argument"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+function spf_sv_rcon_hostname( ~par_slot, ~par_hostname )
+{
+  sp_sc_cvar_unescape ~par_hostname ~par_hostname
+  sp_sc_cvar_replace ~par_hostname ~par_hostname "%0a:" "%0d:" "%22:%97" "%3b:" "%5c:" "%ff:"
+  sp_sc_cvar_substr ~par_hostname ~par_hostname 0 63
+  set hostname #~par_hostname
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_ip_ban( ~par_slot, ~par_target_slot_cidr, ~par_message )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_ip #~par_slot #~par_target_slot_cidr #~par_message "ban"
+}
+
+
+function spf_sv_rcon_ip_info( ~par_slot, ~par_target_slot_cidr, ~par_message )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_ip #~par_slot #~par_target_slot_cidr #~par_message "info"
+}
+
+
+function spf_sv_rcon_ip_kick( ~par_slot, ~par_target_slot_cidr, ~par_message )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_ip #~par_slot #~par_target_slot_cidr #~par_message "kick"
+}
+
+
+function spf_sv_rcon_ip_mute( ~par_slot, ~par_target_slot_cidr, ~par_message )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_ip #~par_slot #~par_target_slot_cidr #~par_message "mute"
+}
+
+
+function spf_sv_rcon_ip_remove( ~par_slot, ~par_target_slot_cidr, ~par_message )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_ip #~par_slot #~par_target_slot_cidr #~par_message "remove"
+}
+
+
+function spf_sv_rcon_kick( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    kick #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_map( ~par_slot, ~par_map )
+{
+  sp_sc_cvar_split ~split ":" ~par_map
+  sp_sc_flow_if number cvar ~split_0 == val 1
+  {
+    set ~map #~split_1
+  }
+  else
+  {
+    set ~map #~split_2
+  }
+
+  sp_sc_cvar_sset ~file "maps/" #~map ".bsp"
+  sp_sc_file_find ~list #~file pak filesystem file
+  sp_sc_flow_if number cvar ~list_0 == val 1
+  {
+    sset ~cmd "map" #~par_map
+    sp_sc_timer 1 #~cmd
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sc_cvar_sset ~msg "ERROR: No map '" #~par_map "' found, did you mean: dm/madrange"
+    sp_sv_print_client #~par_slot #~msg
+  }
+}
+
+
+function spf_sv_rcon_maplist( ~par_slot, ~par_maplist )
+{
+  set ~errors 0
+  sp_sc_cvar_split ~map "," ~par_maplist
+  set ~count 1
+  sp_sc_flow_while number cvar ~count <= val #~map_0
+  {
+    sp_sc_cvar_copy ~mapname ~map_$~count
+
+    sp_sc_cvar_split ~split ":" ~mapname
+    sp_sc_flow_if number cvar ~split_0 == val 1
+    {
+      set ~map #~split_1
+    }
+    else
+    {
+      set ~map #~split_2
+    }
+
+    sp_sc_cvar_sset ~file "maps/" #~map ".bsp"
+    sp_sc_file_find ~list #~file pak filesystem file
+    sp_sc_flow_if number cvar ~list_0 != val 1
+    {
+      add ~errors 1
+      sp_sc_cvar_sset ~msg "ERROR: No map '" #~mapname "' found"
+      sp_sv_print_client #~par_slot #~msg
+    }
+
+    add ~count 1
+  }
+
+  sp_sc_flow_if number cvar ~errors == val 0
+  {
+    zero sv_maplistfile
+    set sv_maplist #~par_maplist
+    sp_sv_print_client #~par_slot "OK"
+  }
+}
+
+
+function spf_sv_rcon_maplistfile( ~par_slot, ~par_maplistfile )
+{
+  sp_sc_cvar_sset ~file "maplists/" #~par_maplistfile ".lst"
+  sp_sc_file_find ~list #~file pak filesystem file
+  sp_sc_flow_if number cvar ~list_0 == val 1
+  {
+    set sv_maplistfile #~par_maplistfile
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid maplistfile"
+
+    sp_sv_print_client #~par_slot "Available maplistfiles:"
+    sp_sc_file_find ~list "maplists/*.lst" pak filesystem file
+    set ~count 1
+    sp_sc_flow_while number cvar ~count <= val #~list_0
+    {
+      sp_sc_cvar_substr ~maplist ~list_$~count 9 9999
+      sp_sc_cvar_split ~split "." ~maplist
+      sp_sc_cvar_sset ~msg "  " #~split_1
+      set ~count_2 2
+      sp_sc_flow_while number cvar ~count_2 < val ~split_0
+      {
+        sp_sc_cvar_copy ~append ~split_$~count_2
+        sp_sc_cvar_append ~msg "."
+        sp_sc_cvar_append ~msg #~append
+        add ~count_2 1
+      }
+      sp_sv_print_client #~par_slot #~msg
+      add ~count 1
+    }
+  }
+}
+
+
+function spf_sv_rcon_mute( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_say_mute #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_password( ~par_slot, ~par_password )
+{
+  set password #~par_password
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_pause( ~par_slot )
+{
+  sp_sc_flow_if number cvar g_movescale != val 0
+  {
+    set _spf_sv_rcon_g_movescale #g_movescale
+  }
+  set g_movescale 0.0
+  set paused 1
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_play( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_client_play #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_red( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_client_red #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_restart( ~par_slot )
+{
+  sset ~cmd "map" #mapname
+  sp_sc_timer 1 #~cmd
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_say( ~par_slot, ~par_msg )
+{
+  sp_sc_cvar_unescape ~par_msg ~par_msg
+  sp_sc_cvar_replace ~par_msg ~par_msg "%0a:" "%0d:" "%22:%97" "%ff:"
+  say #~par_msg
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_spec( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_client_spec #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_spectator_password( ~par_slot, ~par_spectator_password )
+{
+  set spectator_password #~par_spectator_password
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_status( ~par_slot )
+{
+  // Get deathmatch description
+  set ~deathmatch_1 "DM"
+  set ~deathmatch_2 "Assassin"
+  set ~deathmatch_3 "Arsenal"
+  set ~deathmatch_4 "CTF"
+  set ~deathmatch_5 "Realistic"
+  set ~deathmatch_6 "Control"
+  set ~deathmatch_7 "CTB"
+  set ~deathmatch #deathmatch
+  add ~deathmatch 0
+  sp_sc_cvar_copy ~deathmatch_info ~deathmatch_$~deathmatch
+  sp_sc_flow_if text cvar ~deathmatch_info == val ""
+  {
+    set ~deathmatch_info "<unknown>"
+  }
+
+  // Get dmflags
+  set ~dmflags_1 "01 No Health"
+  set ~dmflags_2 "02 No Items"
+  set ~dmflags_3 "03 Weapons Stay"
+  set ~dmflags_4 "04 No Falling Damage"
+  set ~dmflags_5 "05 Realistic Damage"
+  set ~dmflags_6 "06 Same Level"
+  set ~dmflags_7 "07 No weapon reload"
+  set ~dmflags_8 "08 Teamplay"
+  set ~dmflags_9 "09 No Friendly Fire"
+  set ~dmflags_10 "10 Force Respawn"
+  set ~dmflags_11 "11 No Armor"
+  set ~dmflags_12 "12 Infinite Ammo"
+  set ~dmflags_13 "13 Spinning Weapons"
+  set ~dmflags_14 "14 Bullet Only"
+  set ~dmflags_15 "15 Force Join"
+  set ~dmflags_16 "16 Team Red Blue"
+  set ~dmflags #dmflags
+  add ~dmflags 0
+  set ~flag 1
+  set ~bit 1
+  sp_sc_flow_while number cvar ~flag <= val 16
+  {
+    set ~check #~dmflags
+    and ~check #~bit
+    sp_sc_flow_if number cvar ~check != val 0
+    {
+      sp_sc_cvar_append ~dmflags_$~flag ": YES"
+    }
+    else
+    {
+      sp_sc_cvar_append ~dmflags_$~flag ": NO"
+    }
+    add ~flag 1
+    sp_sc_cvar_math_mul ~bit 2
+  }
+
+  sset ~msg "ctf_loops          :" #ctf_loops
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "control_limit      :" #control_limit
+  sp_sv_print_client #~par_slot #~msg
+  sp_sc_cvar_sset ~msg "deathmatch         : " #deathmatch " (" #~deathmatch_info ") (change with .rcon gametype)"
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "dmflags            :" #dmflags "(change some with .rcon ammo/gametype/weapons)"
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_1
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_2
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_3
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_4
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_5
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_6
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_7
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_8
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_9
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_10
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_11
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_12
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_13
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_14
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_15
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "                    " #~dmflags_16
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "fraglimit          :" #fraglimit
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "hostname           :" #hostname
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "mapname            :" #mapname
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "password           :" #password
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "spectator_password :" #spectator_password
+  sp_sv_print_client #~par_slot #~msg
+  sp_sc_cvar_len ~len sv_maplist
+  sp_sc_flow_if text cvar sv_maplistfile == val ""
+  {
+    sp_sc_flow_if number cvar ~len <= val 200
+    {
+      sset ~msg "sv_maplist         :" #sv_maplist
+      sp_sv_print_client #~par_slot #~msg
+    }
+  }
+  sset ~msg "sv_maplistfile     :" #sv_maplistfile
+  sp_sv_print_client #~par_slot #~msg
+  sset ~msg "timelimit          :" #timelimit
+  sp_sv_print_client #~par_slot #~msg
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_swap( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_client_swap #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_timelimit( ~par_slot, ~par_timelimit )
+{
+  add ~par_timelimit 0
+  set timelimit #~par_timelimit
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+function spf_sv_rcon_unmute( ~par_slot, ~par_target_slot )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_star #~par_target_slot _ret_1
+  sp_sc_flow_if text cvar _ret_1 != val ""
+  {
+    sp_sv_say_unmute #~par_target_slot
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_unpause( ~par_slot )
+{
+  set paused 0
+  sp_sc_flow_if number cvar g_movescale == val 0
+  {
+    sp_sc_flow_if number cvar _spf_sv_rcon_g_movescale != val 0
+    {
+      set g_movescale #_spf_sv_rcon_g_movescale
+    }
+    else
+    {
+      set g_movescale 1.0
+    }
+  }
+  sp_sv_print_client #~par_slot "OK"
+}
+
+
+// Using vote code
+function spf_sv_rcon_weapons( ~par_slot, ~par_weapons )
+{
+  sp_sc_flow_if text cvar ~par_weapons == val "all"
+  {
+    sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_weapons_all"
+    sp_sv_print_client #~par_slot "OK"
+  }
+  else
+  {
+    sp_sc_flow_if text cvar ~par_weapons == val "bullet"
+    {
+      sp_sc_timer 1 "sp_sc_func_exec spf_sv_vote_weapons_bullet"
+      sp_sv_print_client #~par_slot "OK"
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: Invalid argument"
+    }
+  }
+}
+
+
+function spf_sv_rcon_helper_ip( ~par_slot, ~par_target_slot, ~par_message, ~par_action )
+{
+  sp_sc_func_exec spf_sv_rcon_helper_get_slot_cidr #~par_target_slot _ret_1 _ret_2
+  set ~slot #_ret_1
+  set ~cidr #_ret_2
+  sp_sc_flow_if text cvar ~slot != val ""
+  {
+    // Some retards use insane settings like filter_add x.y.0.0 (which equals a /16 here)
+    // Don't allow .rcon users to act on blocks larger then a /24 (256 IP addresses)
+    sp_sc_flow_if number cvar ~cidr >= val 24
+    {
+      sp_sc_cvar_split ~split ";" ~par_message
+      sp_sc_flow_if number cvar ~split_0 == val 1
+      {
+        // Get current date
+        sp_sc_info_time
+        sp_sc_cvar_split ~split " " _sp_sc_info_time_datetime
+        // Get .rcon username
+        sp_sc_cvar_copy ~username _spf_sv_rcon_username_$~par_slot
+
+        // Get stored cvars
+        sp_sc_exec_file "sofplus/data/spf_sv_ip.cfg"
+
+        // Add cvar
+        // The _sp_sv_info_client_ip cvar has been set correctly in the spf_sv_rcon_helper_get_slot_cidr function
+        sp_sc_func_exec spf_sc_ip_to_cidr #_sp_sv_info_client_ip #~cidr _ret_1
+        sp_sc_cvar_sset ~ip_$_ret_1 #~par_action ";" #~par_message ";" #~split_1 ": " #~username
+
+        // Save cvars
+        sp_sc_cvar_save spf_sv_ip.cfg ~ip_*
+
+        sp_sv_print_client #~par_slot "OK"
+      }
+      else
+      {
+        sp_sv_print_client #~par_slot "ERROR: Player info can not contain a ';'"
+      }
+    }
+    else
+    {
+      sp_sv_print_client #~par_slot "ERROR: You're not allowed to perform this action on such a large block of IP addresses"
+    }
+  }
+  else
+  {
+    sp_sv_print_client #~par_slot "ERROR: Invalid slot"
+  }
+}
+
+
+function spf_sv_rcon_helper_get_slot( ~par_slot, ~ret_slot )
+{
+  set #~ret_slot ""
+  set ~slot #~par_slot
+  add ~slot 0
+  sp_sc_flow_if text val #~par_slot == val #~slot
+  {
+    sp_sc_flow_if number val #~par_slot >= val 0
+    {
+      sp_sc_flow_if number val #~par_slot < val #maxclients
+      {
+        zero _sp_sv_info_client_ip
+        sp_sv_info_client #~par_slot
+        sp_sc_flow_if text val #_sp_sv_info_client_ip != val ""
+        {
+          set #~ret_slot #~par_slot
+        }
+      }
+    }
+  }
+}
+
+
+function spf_sv_rcon_helper_get_slot_star( ~par_slot, ~ret_slot )
+{
+  sp_sc_flow_if text cvar ~par_slot == val "*"
+  {
+    set #~ret_slot "*"
+  }
+  else
+  {
+    sp_sc_func_exec spf_sv_rcon_helper_get_slot #~par_slot #~ret_slot
+  }
+}
+
+
+function spf_sv_rcon_helper_get_slot_cidr( ~par_slot, ~ret_slot, ~ret_cidr )
+{
+  set #~ret_slot ""
+  set #~ret_cidr ""
+
+  sp_sc_cvar_split ~split "/" ~par_slot
+  sp_sc_flow_if number cvar ~split_0 <= val 2
+  {
+    sp_sc_func_exec spf_sv_rcon_helper_get_slot #~split_1 #~ret_slot
+    sp_sc_flow_if text cvar #~ret_slot != val ""
+    {
+      sp_sc_flow_if number cvar ~split_0 == val 2
+      {
+        set ~cidr #~split_2
+        add ~cidr 0
+        sp_sc_flow_if text val #~split_2 == val #~cidr
+        {
+          sp_sc_flow_if number val #~split_2 >= val 0
+          {
+            sp_sc_flow_if number val #~split_2 <= val 32
+            {
+              set #~ret_cidr #~split_2
+            }
+          }
+        }
+        sp_sc_flow_if text cvar #~ret_cidr == val ""
+        {
+          set #~ret_slot ""
+        }
+      }
+      else
+      {
+        set #~ret_cidr 32
+      }
+    }
+  }
+}

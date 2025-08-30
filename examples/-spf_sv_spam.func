@@ -1,0 +1,64 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Spam messages
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_spam_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_spam_on_map_begin"
+
+  sp_sc_exec_file sofplus/addons/spf_sv_spam.cfg
+
+  set ~index 1
+  sp_sc_cvar_copy ~cvar_value _spf_sv_spam_msg_$~index
+  sp_sc_flow_while text cvar ~cvar_value != val ""
+  {
+    sp_sc_cvar_unescape _spf_sv_spam_msg_$~index _spf_sv_spam_msg_$~index
+    sp_sc_cvar_replace _spf_sv_spam_msg_$~index _spf_sv_spam_msg_$~index "%0a:" "%0d:" "%22:%97" "%ff:"
+
+    add ~index 1
+    sp_sc_cvar_copy ~cvar_value _spf_sv_spam_msg_$~index
+  }
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_spam_on_map_begin()
+{
+  sset ~cmd "sp_sc_func_exec spf_sv_spam_run" #_sp_sv_info_map_count 1
+  sp_sc_timer 30000 #~cmd
+}
+
+
+//
+// Spam messages
+//
+function spf_sv_spam_run( ~par_lc, ~par_index )
+{
+  // Don't run if the counters don't match
+  sp_sc_flow_if number val #~par_lc == val #_sp_sv_info_map_count
+  {
+    sp_sc_flow_if text cvar _spf_sv_spam_msg_$~par_index == val ""
+    {
+      set ~par_index 1
+    }
+
+    // Message to all
+    sp_sc_cvar_copy ~msg _spf_sv_spam_msg_$~par_index
+    sp_sc_flow_if text val #~msg != val ""
+    {
+      sp_sv_print_broadcast #~msg
+    }
+
+    add ~par_index 1
+    sset ~cmd "sp_sc_func_exec spf_sv_spam_run" #_sp_sv_info_map_count #~par_index
+    sp_sc_timer 60000 #~cmd
+  }
+}

@@ -1,0 +1,59 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Reset cvars to their defaults when the map begins
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_defaults_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_begin "spf_sv_defaults_on_map_begin"
+
+  sp_sc_exec_file sofplus/addons/spf_sv_default.cfg
+}
+
+
+//
+// Things to do when the map starts
+//
+function spf_sv_defaults_on_map_begin()
+{
+  // Restore control_limit
+  sp_sc_flow_if number val #_spf_sv_defaults_control_limit >= val 0
+  {
+    set control_limit #_spf_sv_defaults_control_limit
+  }
+
+  // Restore ctf_loops
+  sp_sc_flow_if number val #_spf_sv_defaults_ctf_loops >= val 0
+  {
+    set ctf_loops #_spf_sv_defaults_ctf_loops
+  }
+
+  // Restore fraglimit
+  sp_sc_flow_if number val #_spf_sv_defaults_fraglimit >= val 0
+  {
+    set fraglimit #_spf_sv_defaults_fraglimit
+  }
+
+  // Restore g_movescale
+  sp_sc_flow_if number val #_spf_sv_defaults_g_movescale >= val 0
+  {
+    set g_movescale #_spf_sv_defaults_g_movescale
+  }
+
+  // Restore paused
+  sp_sc_flow_if number val #_spf_sv_defaults_paused >= val 0
+  {
+    set paused #_spf_sv_defaults_paused
+  }
+
+  // Restore timelimit
+  sp_sc_flow_if number val #_spf_sv_defaults_timelimit >= val 0
+  {
+    set timelimit #_spf_sv_defaults_timelimit
+  }
+}

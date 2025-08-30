@@ -1,0 +1,393 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Vote functions
+//
+// Never disable this script. It is used by the SoFplus DLL and by the
+// spf_sv_maprotate and spf_sv_rcon scripts
+//
+// Do not rename the spf_sv_vote_ammo_*, spf_sv_vote_gametype_* and
+// spf_sv_vote_weapon_* functions. They will be executed by the SoFplus DLL.
+// ---------------------------------------------------------------------------
+
+// Available dmflags:
+//  01  No Health
+//  02  No Items
+//  03  Weapons Stay
+//  04  No Falling Damage
+//  05  Realistic Damage
+//  06  Same Level
+//  07  No weapon reload
+//  08  Teamplay
+//  09  No Friendly Fire
+//  10  Force Respawn
+//  11  No Armor
+//  12  Infinite Ammo
+//  13  Spinning Weapons
+//  14  Bullet Only
+//  15  Force Join
+//  16  Team Red Blue
+
+
+// ====
+// Ammo
+// ====
+
+//
+// Limited ammo
+//
+function spf_sv_vote_ammo_limited( * )
+{
+  set _sp_sv_disable_alt_attack_8        0           // Machinegun
+
+  // No 'Infinite Ammo'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags !Infinite_Ammo
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    // Restart current map
+    map #_sp_sv_info_map_current
+  }
+}
+
+
+//
+// Unlimited ammo
+//
+function spf_sv_vote_ammo_unlimited( * )
+{
+  set _sp_sv_disable_alt_attack_8        1           // Machinegun
+
+  // 'Infinite Ammo'; 'Bullet only'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags Infinite_Ammo Bullet_Only
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    // Restart current map
+    map #_sp_sv_info_map_current
+  }
+}
+
+
+// ========
+// Gametype
+// ========
+
+//
+// Arsenal
+//
+function spf_sv_vote_gametype_arsenal( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // Only disabled for Arsenal:
+  set _sp_sv_disable_alt_attack_10       1           // Rocket launcher
+
+  set deathmatch                         3
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravdm"
+    map "dm/nycdm1"
+  }
+}
+
+
+//
+// Assassin
+//
+function spf_sv_vote_gametype_assassin( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  set deathmatch                         2
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravdm"
+    map "dm/nycdm1"
+  }
+}
+
+
+//
+// Control
+//
+function spf_sv_vote_gametype_control( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  set deathmatch                         6
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravcon"
+    map "dm/irqcon1"
+  }
+}
+
+
+//
+// CTB
+//
+function spf_sv_vote_gametype_ctb( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // No 'Teamplay'; No 'Team Red Blue'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags !Teamplay !Team_Red_Blue
+
+  set deathmatch                         7
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravctb"
+    map "dm/sudctb1"
+  }
+}
+
+
+//
+// CTF
+//
+function spf_sv_vote_gametype_ctf( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // 'No Friendly Fire'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags No_Friendly_Fire
+
+  set deathmatch                         4
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravctf"
+    map "dm/nycctf1"
+  }
+}
+
+
+//
+// DM
+//
+function spf_sv_vote_gametype_dm( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // No 'Teamplay'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags !Teamplay
+
+  set deathmatch                         1
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravdm"
+    map "dm/nycdm1"
+  }
+}
+
+
+//
+// Realistic
+//
+function spf_sv_vote_gametype_realistic( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // No 'Teamplay'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags !Teamplay
+
+  set deathmatch                         5
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravrl"
+    map "dm/nycdm3"
+  }
+}
+
+
+//
+// Red/Blue CTB
+//
+function spf_sv_vote_gametype_redblue_ctb( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // 'Teamplay'; 'Team Red Blue'; 'No Friendly Fire'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags Teamplay Team_Red_Blue No_Friendly_Fire
+
+  set deathmatch                         7
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravctb"
+    map "dm/sudctb1"
+  }
+}
+
+
+//
+// Team DM
+//
+function spf_sv_vote_gametype_team_dm( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // 'Teamplay'; 'No Friendly Fire'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags Teamplay No_Friendly_Fire
+
+  set deathmatch                         1
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravdm"
+    map "dm/nycdm1"
+  }
+}
+
+
+//
+// Team Realistic
+//
+function spf_sv_vote_gametype_team_realistic( * )
+{
+  sp_sc_func_exec spf_sv_vote_helper_gametype_defaults
+
+  // 'Teamplay'; 'No Friendly Fire'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags Teamplay No_Friendly_Fire
+
+  set deathmatch                         5
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    set sv_maplistfile "ravrl"
+    map "dm/nycdm3"
+  }
+}
+
+
+//
+// All weapons
+//
+function spf_sv_vote_weapons_all( * )
+{
+  set _sp_sv_disable_alt_attack_8        0           // Machinegun
+
+  // No 'Infinite Ammo'; No 'Bullet Only'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags !Infinite_Ammo !Bullet_Only
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    // Restart current map
+    map #_sp_sv_info_map_current
+  }
+}
+
+
+//
+// Bullet only weapons
+//
+function spf_sv_vote_weapons_bullet( * )
+{
+  // 'Bullet Only'
+  sp_sc_func_exec spf_sv_vote_helper_dmflags dmflags Bullet_Only
+
+  sp_sc_flow_if text val #~1 == val ""
+  {
+    // Restart current map
+    map #_sp_sv_info_map_current
+  }
+}
+
+
+// ================
+// Helper functions
+// ================
+
+//
+// Helper function to set gametpye defaults
+//
+function spf_sv_vote_helper_gametype_defaults()
+{
+  // Enabled by default
+  // Will only disabled for Arsenal:
+  set _sp_sv_disable_alt_attack_10       0           // Rocket launcher
+}
+
+
+//
+// Helper function to set / unset bits
+//
+function spf_sv_vote_helper_dmflags( ~dmflags_cvar_name, * )
+{
+  sp_sc_cvar_copy ~dmflags #~dmflags_cvar_name
+
+  set ~dmflag_01     1
+  set ~dmflag_02     2
+  set ~dmflag_03     4
+  set ~dmflag_04     8
+  set ~dmflag_05    16
+  set ~dmflag_06    32
+  set ~dmflag_07    64
+  set ~dmflag_08   128
+  set ~dmflag_09   256
+  set ~dmflag_10   512
+  set ~dmflag_11  1024
+  set ~dmflag_12  2048
+  set ~dmflag_13  4096
+  set ~dmflag_14  8192
+  set ~dmflag_15 16384
+  set ~dmflag_16 32768
+  set ~dmflag_No_Health             1
+  set ~dmflag_No_Items              2
+  set ~dmflag_Weapons_Stay          4
+  set ~dmflag_No_Falling_Damage     8
+  set ~dmflag_Realistic_Damage     16
+  set ~dmflag_Same_Level           32
+  set ~dmflag_No_weapon_reload     64
+  set ~dmflag_Teamplay            128
+  set ~dmflag_No_Friendly_Fire    256
+  set ~dmflag_Force_Respawn       512
+  set ~dmflag_No_Armor           1024
+  set ~dmflag_Infinite_Ammo      2048
+  set ~dmflag_Spinning_Weapons   4096
+  set ~dmflag_Bullet_Only        8192
+  set ~dmflag_Force_Join        16384
+  set ~dmflag_Team_Red_Blue     32768
+
+  set ~index 1
+  sp_sc_flow_while number cvar ~index <= val #~0
+  {
+    sp_sc_cvar_copy ~arg ~$~index
+    sp_sc_cvar_substr ~firstchar ~arg 0 1
+    sp_sc_flow_if text val #~firstchar == val "!"
+    {
+      sp_sc_cvar_substr ~arg ~arg 1 9999
+    }
+
+    sp_sc_flow_if text cvar ~dmflag_$~arg != val ""
+    {
+      sp_sc_cvar_copy ~bit ~dmflag_$~arg
+
+      sp_sc_flow_if text val #~firstchar == val "!"
+      {
+        // Unset
+        or ~dmflags #~bit
+        xor ~dmflags #~bit
+      }
+      else
+      {
+        // Set
+        or ~dmflags #~bit
+      }
+    }
+    else
+    {
+      echo "Unknown flag:" #~arg
+    }
+    add ~index 1
+  }
+
+  set #~dmflags_cvar_name #~dmflags
+}

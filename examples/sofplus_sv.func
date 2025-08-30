@@ -1,0 +1,9 @@
+// SoFplus
+
+function sofplus_sv_init()
+{
+  echo "SoFplus server init"
+
+  // Load functions for ammo, gametype and weapon votes
+  sp_sc_func_load_file sofplus/spf_sv_vote.func
+}

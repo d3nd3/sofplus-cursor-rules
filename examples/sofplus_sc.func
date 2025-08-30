@@ -1,0 +1,10 @@
+// SoFplus
+
+function sofplus_sc_init()
+{
+  echo "SoFplus server/client init"
+
+  sp_sc_func_load_file sofplus/spf_sc_gcd.func
+  sp_sc_func_load_file sofplus/spf_sc_ip.func
+  sp_sc_func_load_file sofplus/spf_sc_list.func
+}

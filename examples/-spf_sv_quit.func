@@ -1,0 +1,30 @@
+// SoFplus
+
+// ---------------------------------------------------------------------------
+// Quit the server if it has been running for long
+// Servers start acting weird when counters overflow
+// ---------------------------------------------------------------------------
+
+
+//
+// Init
+//
+function spf_sv_quit_init()
+{
+  sp_sc_func_exec spf_sc_list_add_func _sp_sv_on_map_rotate "spf_sv_quit_on_map_rotate"
+}
+
+
+//
+// Map rotate
+//
+function spf_sv_quit_on_map_rotate()
+{
+  sp_sc_info_time
+  sp_sc_flow_if number cvar _sp_sc_info_time_min > val 30240
+  {
+    echo "The server has to be restarted"
+    echo "It has been running for more than three weeks"
+    quit
+  }
+}

@@ -61,6 +61,12 @@ Documentation for the SoFplus scripting language, optimized for use with the Cur
   rules from the nearest `.cursor/rules/` ancestor, so placing a copy next to your
   scripts ensures the rules only apply when working in that folder.
 
+> **Important note:** There's a known bug in Cursor where intelligent rules placed
+> only in nested subfolders will not be applied correctly. For intelligent rule
+> behavior to work reliably, put your `.cursor/rules` directory in the repository
+> root (or the top-level workspace folder). Placing the rules only in nested
+> subfolders may cause Cursor to ignore intelligent rule loading.
+
 ### Quickstart
 
 - Format docs: `make format` (or `python3 tools/format_sofplus_docs.py --write`)

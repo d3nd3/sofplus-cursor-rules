@@ -1,0 +1,83 @@
+# sofplus-cursor-rules — system overview
+# Zones run left to right: entry points -> core -> state -> external.
+# This repo has no runtime: the "core" is a set of one-pass text transforms
+# over the same page corpus, and the "state" is the docs tree itself.
+# Style classes set strokes only, so light and dark stays readable.
+
+title: |md
+  # sofplus-cursor-rules
+  A documentation compiler: 329 SoFplus command/cvar pages kept in the shape Cursor loads.
+| {near: top-center}
+
+direction: right
+grid-columns: 2
+grid-rows: 2
+horizontal-gap: 260
+vertical-gap: 240
+
+entry: Entry points {
+  direction: down
+
+  cursor: Cursor agent · auto-loads .cursor/rules for the nearest folder
+  quickref: sofplus_func_quickref.mdc · always-on rules when editing .func
+  make: Makefile · format / diff / map / map-check / validate / check
+  cli: tools/*.py · each script is also a standalone CLI
+
+  make -> cli: shells out to python3
+  cursor -> quickref: nearest folder wins
+}
+
+state: State {
+  direction: down
+
+  cmds: 115 command pages · .cursor/rules/sofplus-api/commands/*.mdc
+  cvars: 214 cvar pages · cvars/*.mdc, wildcard families end in _asterisk
+  mapjson: map.json · name -> path + summary, generated, not committed
+  index: commands_index.md · the other lookup table, also not committed
+  ex: examples/*.func · 38 real addon scripts, the corpus under test
+  work: workdir/test.func · scratch, not wired to anything
+
+  mapjson -> cmds: path strings into the page tree
+  index -> cmds: path strings into the page tree
+}
+
+core: Core {
+  direction: down
+
+  split: split_agents.py · AGENTS.html -> one .mdc per command/cvar
+  migrate: migrate_docs_to_rules.py · docs/ -> .cursor/rules/, adds frontmatter
+  format: format_sofplus_docs.py · normalizes Synopsis / Parameters / Values
+  build: build_map.py · filesystem + index + wildcards + dot aliases -> map.json
+  validate: validate_docs.py · index <-> map <-> files, plus title/Synopsis
+  vexamples: validate_examples.py · examples non-empty, tabs are warning-only
+  descs: update_command_descriptions.py · frontmatter description lines
+
+  split -> migrate: pages first, frontmatter second
+  migrate -> format: migrated pages get normalized
+  format -> build: formatting settles before the map is derived
+}
+
+ext: External {
+  direction: down
+
+  cursorapp: Cursor editor · reads frontmatter, opens a page only if relevant
+  ci: GitHub Actions ci.yml · runs `make check` on push and PR
+  api: SoFplus runtime API · the commands and cvars being documented
+  html: AGENTS.html · the original HTML dump, absent from this repo
+}
+
+entry -> core: runs a transform
+core -> state: mutates the page tree
+state -> ext: read by the agent, checked by CI
+
+classes: {
+  entry: {style: {stroke: "#2f6fbf"}}
+  core: {style: {stroke: "#2f8f5f"}}
+  state: {style: {stroke: "#a86a12"; stroke-dash: 3}}
+  ext: {style: {stroke: "#8a4fbf"; stroke-dash: 5}}
+}
+
+entry.class: entry
+core.class: core
+state.class: state
+ext.class: ext

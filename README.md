@@ -2,6 +2,8 @@
 
 Documentation for the SoFplus scripting language, optimized for use with the Cursor assistant.
 
+Prefer pictures? Start with **[HUMANS.md](HUMANS.md)**.
+
 ### What this project contains
 
 - `.cursor/rules/sofplus-api/` (agent-visible copies / canonical index)
